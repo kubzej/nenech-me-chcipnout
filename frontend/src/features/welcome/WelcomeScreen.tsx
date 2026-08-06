@@ -1,0 +1,50 @@
+import type { FormEvent } from "react";
+import { Hero } from "../../components/layout/Hero";
+import { AuthPanel } from "../auth/AuthPanel";
+import { WelcomeVisual } from "./WelcomeVisual";
+import "./welcome-screen.css";
+
+type WelcomeScreenProps = {
+  email: string;
+  error: string | null;
+  isDisabled: boolean;
+  isLoading: boolean;
+  password: string;
+  onEmailChange: (value: string) => void;
+  onLogin: (event: FormEvent<HTMLFormElement>) => void;
+  onPasswordChange: (value: string) => void;
+};
+
+export function WelcomeScreen({
+  email,
+  error,
+  isDisabled,
+  isLoading,
+  onEmailChange,
+  onLogin,
+  onPasswordChange,
+  password,
+}: WelcomeScreenProps) {
+  return (
+    <div className="welcome-screen">
+      <div className="welcome-screen__content">
+        <Hero title="Nenech mě chcípnout!" />
+        <WelcomeVisual />
+        <p className="welcome-screen__copy">
+          Přihlas se, ať tenhle naštvaný list nemusí osobně vysvětlovat muškátům,
+          proč zase umírají žízní.
+        </p>
+        <AuthPanel
+          email={email}
+          error={error}
+          isDisabled={isDisabled}
+          isLoading={isLoading}
+          onEmailChange={onEmailChange}
+          onLogin={onLogin}
+          onPasswordChange={onPasswordChange}
+          password={password}
+        />
+      </div>
+    </div>
+  );
+}

@@ -7,20 +7,20 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg"],
+      includeAssets: ["brand/app-icon.png"],
       manifest: {
         name: "Nenech mě chcípnout!",
         short_name: "Kytky",
         description: "Soukromý hlídač kytek.",
-        theme_color: "#5f8f3e",
+        theme_color: "#2e6f48",
         background_color: "#fbfff5",
         display: "standalone",
         start_url: "/",
         icons: [
           {
-            src: "/favicon.svg",
-            sizes: "any",
-            type: "image/svg+xml",
+            src: "/brand/app-icon.png",
+            sizes: "1024x1024",
+            type: "image/png",
             purpose: "any maskable"
           }
         ]
@@ -31,4 +31,3 @@ export default defineConfig({
     port: 5173
   }
 });
-

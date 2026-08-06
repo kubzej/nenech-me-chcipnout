@@ -1,0 +1,5 @@
+.app-shell {
+  min-height: 100vh;
+  padding: 0 clamp(18px, 4vw, 48px);
+  background: var(--color-surface-2);
+}

@@ -1,0 +1,16 @@
+.screen {
+  min-height: calc(100vh - 96px);
+}
+
+.screen--blank {
+  display: block;
+}
+
+.screen--settings {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  max-width: var(--layout-max-sm);
+  margin: 0 auto;
+  padding: var(--space-5) 0;
+}

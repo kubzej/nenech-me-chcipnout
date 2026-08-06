@@ -1,0 +1,36 @@
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color: var(--color-ink);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+::selection {
+  color: var(--color-ink);
+  background: var(--color-sprout);
+}

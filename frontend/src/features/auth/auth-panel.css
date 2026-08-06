@@ -1,0 +1,17 @@
+.auth-panel {
+  display: grid;
+  gap: var(--space-3);
+  max-width: var(--layout-max-sm);
+}
+
+.auth-panel__surface {
+  padding: var(--space-5);
+}
+
+.auth-panel__error {
+  border-radius: var(--radius-md);
+  padding: var(--space-3) 14px;
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  font-weight: 700;
+}

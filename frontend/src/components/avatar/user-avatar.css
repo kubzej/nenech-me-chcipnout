@@ -1,0 +1,19 @@
+.user-avatar {
+  display: block;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  background: var(--color-surface);
+  box-shadow: 0 10px 24px rgba(24, 35, 21, 0.14);
+}
+
+.user-avatar--sm {
+  width: 40px;
+  height: 40px;
+}
+
+.user-avatar--md {
+  width: 56px;
+  height: 56px;
+}
+
