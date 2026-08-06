@@ -1,0 +1,20 @@
+.screen-header {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.screen-header h1 {
+  max-width: 100%;
+  color: var(--color-earth);
+  font-size: var(--text-xl);
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.screen-header p {
+  color: var(--color-ink);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: var(--line-tight);
+}
