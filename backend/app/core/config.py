@@ -8,9 +8,8 @@ class Settings(BaseSettings):
 
     app_env: str = "local"
     app_cors_origins: str = "http://localhost:5173"
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
     supabase_url: str | None = None
-    supabase_jwt_secret: str | None = None
+    supabase_anon_key: str | None = None
 
     @cached_property
     def cors_origins(self) -> list[str]:
@@ -20,6 +19,20 @@ class Settings(BaseSettings):
             if origin.strip()
         ]
 
+    @cached_property
+    def supabase_auth_issuer(self) -> str | None:
+        if not self.supabase_url:
+            return None
+
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
+
+    @cached_property
+    def supabase_jwks_url(self) -> str | None:
+        issuer = self.supabase_auth_issuer
+        if not issuer:
+            return None
+
+        return f"{issuer}/.well-known/jwks.json"
+
 
 settings = Settings()
-
