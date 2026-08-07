@@ -168,6 +168,7 @@ export function PlacesScreen() {
 
     try {
       await apiDeleteAuthed(`/api/places/locations/${location.id}`);
+      resetLocationForm();
       await loadPlaces({ showLoading: false });
     } catch (deleteError) {
       setError(
@@ -263,6 +264,7 @@ export function PlacesScreen() {
 
     try {
       await apiDeleteAuthed(`/api/places/zones/${zone.id}`);
+      resetZoneForm();
       await loadPlaces({ showLoading: false });
     } catch (deleteError) {
       setError(
@@ -355,6 +357,7 @@ export function PlacesScreen() {
 
     try {
       await apiDeleteAuthed(`/api/places/containers/${container.id}`);
+      resetContainerForm();
       await loadPlaces({ showLoading: false });
     } catch (deleteError) {
       setError(

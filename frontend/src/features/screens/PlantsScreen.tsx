@@ -140,6 +140,7 @@ export function PlantsScreen() {
 
     try {
       await apiDeleteAuthed(`/api/kytky/${kytka.id}`);
+      resetForm();
       await loadData({ showLoading: false });
     } catch (deleteError) {
       setError(
