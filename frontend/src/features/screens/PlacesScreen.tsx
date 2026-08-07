@@ -612,11 +612,13 @@ export function PlacesScreen() {
                     icon={<Pencil aria-hidden="true" size={16} />}
                     label="Upravit místo"
                     onClick={() => openEditLocationSheet(location)}
+                    size="sm"
                   />
                   <IconButton
                     icon={<Trash2 aria-hidden="true" size={16} />}
                     label="Smazat místo"
                     onClick={() => handleDeleteLocation(location)}
+                    size="sm"
                   />
                 </div>
               </div>
@@ -645,11 +647,13 @@ export function PlacesScreen() {
                         icon={<Pencil aria-hidden="true" size={16} />}
                         label="Upravit zónu"
                         onClick={() => openEditZoneSheet(zone, location.id)}
+                        size="sm"
                       />
                       <IconButton
                         icon={<Trash2 aria-hidden="true" size={16} />}
                         label="Smazat zónu"
                         onClick={() => handleDeleteZone(zone)}
+                        size="sm"
                       />
                     </div>
                   </div>
@@ -670,11 +674,13 @@ export function PlacesScreen() {
                           icon={<Pencil aria-hidden="true" size={16} />}
                           label="Upravit nádobu"
                           onClick={() => openEditContainerSheet(container, zone.id)}
+                          size="sm"
                         />
                         <IconButton
                           icon={<Trash2 aria-hidden="true" size={16} />}
                           label="Smazat nádobu"
                           onClick={() => handleDeleteContainer(container)}
+                          size="sm"
                         />
                       </div>
                     </div>

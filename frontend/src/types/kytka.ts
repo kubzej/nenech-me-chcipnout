@@ -1,8 +1,11 @@
 export type KytkaListItem = {
   id: string;
+  container_id: string;
   display_name: string;
   species_label: string | null;
   status: string;
+  acquired_on: string | null;
+  notes: string | null;
   container_name: string | null;
   zone_name: string | null;
   location_name: string | null;
@@ -10,4 +13,13 @@ export type KytkaListItem = {
   scientific_name: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type KytkaCreateRequest = {
+  container_id: string;
+  display_name: string;
+  species_label?: string | null;
+  status?: "ok" | "monitoring" | "sick" | "dormant" | "dead";
+  acquired_on?: string | null;
+  notes?: string | null;
 };

@@ -66,7 +66,8 @@
   box-shadow: var(--shadow-soft);
 }
 
-.place-tree__header {
+.place-tree__header,
+.kytka-list__item-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -83,7 +84,7 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
 }
 
 .place-tree__empty {
