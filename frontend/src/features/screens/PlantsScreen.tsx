@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Leaf, Pencil, Plus, Trash2 } from "lucide-react";
+import { Leaf, Pencil, Plus } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { ChoiceField } from "../../components/ui/ChoiceField";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -267,20 +267,12 @@ export function PlantsScreen() {
                     {kytka.species_label ?? kytka.care_profile_name ?? "bez druhu"}
                   </Text>
                 </div>
-                <div className="place-tree__row-actions">
-                  <IconButton
-                    icon={<Pencil aria-hidden="true" size={16} />}
-                    label="Upravit kytku"
-                    onClick={() => openEditSheet(kytka)}
-                    size="sm"
-                  />
-                  <IconButton
-                    icon={<Trash2 aria-hidden="true" size={16} />}
-                    label="Smazat kytku"
-                    onClick={() => handleDeleteKytka(kytka)}
-                    size="sm"
-                  />
-                </div>
+                <IconButton
+                  icon={<Pencil aria-hidden="true" size={16} />}
+                  label="Upravit kytku"
+                  onClick={() => openEditSheet(kytka)}
+                  size="sm"
+                />
               </div>
               <Text as="small" variant="caption">
                 {[kytka.location_name, kytka.zone_name, kytka.container_name]

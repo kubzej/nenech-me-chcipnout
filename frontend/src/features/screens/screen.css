@@ -80,13 +80,6 @@
   gap: var(--space-1);
 }
 
-.place-tree__row-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 2px;
-}
-
 .place-tree__empty {
   width: fit-content;
   margin: var(--space-2) 0 0;
