@@ -1,18 +1,25 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { MapPin, Plus } from 'lucide-react';
+import { MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ChoiceField } from '../../components/ui/ChoiceField';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { IconButton } from '../../components/ui/IconButton';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { Sheet } from '../../components/ui/Sheet';
 import { SkeletonCard } from '../../components/ui/SkeletonCard';
 import { Text } from '../../components/ui/Text';
 import { TextField } from '../../components/ui/TextField';
 import { LocationWeather } from '../weather/LocationWeather';
-import { apiGetAuthed, apiPostAuthed } from '../../lib/api';
+import {
+  apiDeleteAuthed,
+  apiGetAuthed,
+  apiPatchAuthed,
+  apiPostAuthed,
+} from '../../lib/api';
 import type {
   ContainerCreateRequest,
   LocationCreateRequest,
+  PlaceContainerOverview,
   PlaceLocationOverview,
   PlaceZoneOverview,
   ZoneCreateRequest,
@@ -49,6 +56,14 @@ export function PlacesScreen() {
   const [containerSelfWatering, setContainerSelfWatering] =
     useState<'yes' | 'no'>('no');
   const [containerVolume, setContainerVolume] = useState('');
+  const [editingLocation, setEditingLocation] =
+    useState<PlaceLocationOverview | null>(null);
+  const [editingZone, setEditingZone] =
+    useState<{ zone: PlaceZoneOverview; locationId: string } | null>(null);
+  const [editingContainer, setEditingContainer] = useState<{
+    container: PlaceContainerOverview;
+    zoneId: string;
+  } | null>(null);
 
   const loadPlaces = useCallback(
     async (options: { showLoading?: boolean } = {}) => {
@@ -79,7 +94,7 @@ export function PlacesScreen() {
     void loadPlaces();
   }, [loadPlaces]);
 
-  async function handleCreateLocation(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmitLocation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const parsedCoordinates = parseCoordinates(coordinates);
@@ -101,32 +116,78 @@ export function PlacesScreen() {
     setIsCreating(true);
 
     try {
-      await apiPostAuthed('/api/places/locations', payload);
-      setCoordinates('');
-      setLocationName('');
-      setIsCreateSheetOpen(false);
+      if (editingLocation) {
+        await apiPatchAuthed(
+          `/api/places/locations/${editingLocation.id}`,
+          payload,
+        );
+      } else {
+        await apiPostAuthed('/api/places/locations', payload);
+      }
+      resetLocationForm();
       await loadPlaces({ showLoading: false });
     } catch (createError) {
       setError(
         createError instanceof Error
           ? createError.message
-          : 'Místo se nevytvořilo.',
+          : 'Místo se nepodařilo uložit.',
       );
     } finally {
       setIsCreating(false);
     }
   }
 
-  async function handleCreateZone(event: FormEvent<HTMLFormElement>) {
+  function openEditLocationSheet(location: PlaceLocationOverview) {
+    setEditingLocation(location);
+    setLocationName(location.name);
+    setCoordinates(formatCoordinatesForInput(location.latitude, location.longitude));
+    setFormError(null);
+  }
+
+  function resetLocationForm() {
+    setIsCreateSheetOpen(false);
+    setEditingLocation(null);
+    setCoordinates('');
+    setLocationName('');
+    setFormError(null);
+  }
+
+  async function handleDeleteLocation(location: PlaceLocationOverview) {
+    const zoneCount = location.zones.length;
+    const confirmMessage =
+      zoneCount > 0
+        ? `Smazat místo „${location.name}" a ${zoneCount} zón(y) v něm?`
+        : `Smazat místo „${location.name}"?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await apiDeleteAuthed(`/api/places/locations/${location.id}`);
+      await loadPlaces({ showLoading: false });
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Místo se nepodařilo smazat.',
+      );
+    }
+  }
+
+  async function handleSubmitZone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!activeLocationForZone) {
+    const locationId = editingZone ? editingZone.locationId : activeLocationForZone?.id;
+    if (!locationId) {
       return;
     }
 
     const payload: ZoneCreateRequest = {
       environment: zoneEnvironment,
       light_exposure: zoneLightExposure,
-      location_id: activeLocationForZone.id,
+      location_id: locationId,
       name: zoneName,
       rain_reach: zoneRainReach,
       wind_exposure: zoneWindExposure,
@@ -136,14 +197,18 @@ export function PlacesScreen() {
     setIsCreating(true);
 
     try {
-      await apiPostAuthed('/api/places/zones', payload);
+      if (editingZone) {
+        await apiPatchAuthed(`/api/places/zones/${editingZone.zone.id}`, payload);
+      } else {
+        await apiPostAuthed('/api/places/zones', payload);
+      }
       resetZoneForm();
       await loadPlaces({ showLoading: false });
     } catch (createError) {
       setError(
         createError instanceof Error
           ? createError.message
-          : 'Zóna se nevytvořila.',
+          : 'Zónu se nepodařilo uložit.',
       );
     } finally {
       setIsCreating(false);
@@ -159,8 +224,18 @@ export function PlacesScreen() {
     setZoneWindExposure('unknown');
   }
 
+  function openEditZoneSheet(zone: PlaceZoneOverview, locationId: string) {
+    setEditingZone({ zone, locationId });
+    setZoneName(zone.name);
+    setZoneEnvironment(zone.environment as ZoneCreateRequest['environment']);
+    setZoneLightExposure(zone.light_exposure as ZoneCreateRequest['light_exposure']);
+    setZoneRainReach(zone.rain_reach as ZoneCreateRequest['rain_reach']);
+    setZoneWindExposure(zone.wind_exposure as ZoneCreateRequest['wind_exposure']);
+  }
+
   function resetZoneForm() {
     setActiveLocationForZone(null);
+    setEditingZone(null);
     setZoneName('');
     setZoneEnvironment('outdoor');
     setZoneLightExposure('unknown');
@@ -168,9 +243,35 @@ export function PlacesScreen() {
     setZoneWindExposure('unknown');
   }
 
-  async function handleCreateContainer(event: FormEvent<HTMLFormElement>) {
+  async function handleDeleteZone(zone: PlaceZoneOverview) {
+    const containerCount = zone.containers.length;
+    const confirmMessage =
+      containerCount > 0
+        ? `Smazat zónu „${zone.name}" a ${containerCount} nádob(y) v ní?`
+        : `Smazat zónu „${zone.name}"?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await apiDeleteAuthed(`/api/places/zones/${zone.id}`);
+      await loadPlaces({ showLoading: false });
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Zónu se nepodařilo smazat.',
+      );
+    }
+  }
+
+  async function handleSubmitContainer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!activeZoneForContainer) {
+    const zoneId = editingContainer ? editingContainer.zoneId : activeZoneForContainer?.id;
+    if (!zoneId) {
       return;
     }
 
@@ -180,21 +281,28 @@ export function PlacesScreen() {
       drainage: containerDrainage,
       name: containerName,
       self_watering: containerSelfWatering === 'yes',
-      zone_id: activeZoneForContainer.id,
+      zone_id: zoneId,
     };
 
     setError(null);
     setIsCreating(true);
 
     try {
-      await apiPostAuthed('/api/places/containers', payload);
+      if (editingContainer) {
+        await apiPatchAuthed(
+          `/api/places/containers/${editingContainer.container.id}`,
+          payload,
+        );
+      } else {
+        await apiPostAuthed('/api/places/containers', payload);
+      }
       resetContainerForm();
       await loadPlaces({ showLoading: false });
     } catch (createError) {
       setError(
         createError instanceof Error
           ? createError.message
-          : 'Nádoba se nevytvořila.',
+          : 'Nádobu se nepodařilo uložit.',
       );
     } finally {
       setIsCreating(false);
@@ -210,13 +318,46 @@ export function PlacesScreen() {
     setContainerVolume('');
   }
 
+  function openEditContainerSheet(container: PlaceContainerOverview, zoneId: string) {
+    setEditingContainer({ container, zoneId });
+    setContainerName(container.name);
+    setContainerType(container.container_type as ContainerCreateRequest['container_type']);
+    setContainerDrainage(
+      container.drainage as NonNullable<ContainerCreateRequest['drainage']>,
+    );
+    setContainerSelfWatering(container.self_watering ? 'yes' : 'no');
+    setContainerVolume(
+      container.approx_volume_l != null ? String(container.approx_volume_l) : '',
+    );
+  }
+
   function resetContainerForm() {
     setActiveZoneForContainer(null);
+    setEditingContainer(null);
     setContainerName('');
     setContainerType('pot');
     setContainerDrainage('unknown');
     setContainerSelfWatering('no');
     setContainerVolume('');
+  }
+
+  async function handleDeleteContainer(container: PlaceContainerOverview) {
+    if (!window.confirm(`Smazat nádobu „${container.name}"?`)) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await apiDeleteAuthed(`/api/places/containers/${container.id}`);
+      await loadPlaces({ showLoading: false });
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Nádobu se nepodařilo smazat.',
+      );
+    }
   }
 
   return (
@@ -234,12 +375,14 @@ export function PlacesScreen() {
       ) : null}
 
       <Sheet
-        isOpen={isCreateSheetOpen}
-        onClose={() => setIsCreateSheetOpen(false)}
-        title="Nové místo"
+        isOpen={isCreateSheetOpen || editingLocation !== null}
+        onClose={resetLocationForm}
+        title={
+          editingLocation ? `Upravit místo: ${editingLocation.name}` : 'Nové místo'
+        }
       >
         <div className="location-form">
-          <form onSubmit={handleCreateLocation}>
+          <form onSubmit={handleSubmitLocation}>
             <TextField
               disabled={isCreating}
               label="Název místa"
@@ -273,23 +416,39 @@ export function PlacesScreen() {
               </Text>
             ) : null}
             <Button disabled={isCreating} type="submit">
-              {isCreating ? 'Ukládám...' : 'Uložit místo'}
+              {isCreating
+                ? 'Ukládám...'
+                : editingLocation
+                  ? 'Uložit změny'
+                  : 'Uložit místo'}
             </Button>
+            {editingLocation ? (
+              <Button
+                disabled={isCreating}
+                onClick={() => handleDeleteLocation(editingLocation)}
+                type="button"
+                variant="ghost"
+              >
+                Smazat místo
+              </Button>
+            ) : null}
           </form>
         </div>
       </Sheet>
 
       <Sheet
-        isOpen={activeLocationForZone !== null}
+        isOpen={activeLocationForZone !== null || editingZone !== null}
         onClose={resetZoneForm}
         title={
-          activeLocationForZone
-            ? `Nová zóna: ${activeLocationForZone.name}`
-            : 'Nová zóna'
+          editingZone
+            ? `Upravit zónu: ${editingZone.zone.name}`
+            : activeLocationForZone
+              ? `Nová zóna: ${activeLocationForZone.name}`
+              : 'Nová zóna'
         }
       >
         <div className="location-form">
-          <form onSubmit={handleCreateZone}>
+          <form onSubmit={handleSubmitZone}>
             <TextField
               disabled={isCreating}
               label="Název zóny"
@@ -328,23 +487,39 @@ export function PlacesScreen() {
               value={zoneWindExposure}
             />
             <Button disabled={isCreating} type="submit">
-              {isCreating ? 'Ukládám...' : 'Uložit zónu'}
+              {isCreating
+                ? 'Ukládám...'
+                : editingZone
+                  ? 'Uložit změny'
+                  : 'Uložit zónu'}
             </Button>
+            {editingZone ? (
+              <Button
+                disabled={isCreating}
+                onClick={() => handleDeleteZone(editingZone.zone)}
+                type="button"
+                variant="ghost"
+              >
+                Smazat zónu
+              </Button>
+            ) : null}
           </form>
         </div>
       </Sheet>
 
       <Sheet
-        isOpen={activeZoneForContainer !== null}
+        isOpen={activeZoneForContainer !== null || editingContainer !== null}
         onClose={resetContainerForm}
         title={
-          activeZoneForContainer
-            ? `Nová nádoba: ${activeZoneForContainer.name}`
-            : 'Nová nádoba'
+          editingContainer
+            ? `Upravit nádobu: ${editingContainer.container.name}`
+            : activeZoneForContainer
+              ? `Nová nádoba: ${activeZoneForContainer.name}`
+              : 'Nová nádoba'
         }
       >
         <div className="location-form">
-          <form onSubmit={handleCreateContainer}>
+          <form onSubmit={handleSubmitContainer}>
             <TextField
               disabled={isCreating}
               label="Název nádoby"
@@ -385,8 +560,22 @@ export function PlacesScreen() {
               value={containerVolume}
             />
             <Button disabled={isCreating} type="submit">
-              {isCreating ? 'Ukládám...' : 'Uložit nádobu'}
+              {isCreating
+                ? 'Ukládám...'
+                : editingContainer
+                  ? 'Uložit změny'
+                  : 'Uložit nádobu'}
             </Button>
+            {editingContainer ? (
+              <Button
+                disabled={isCreating}
+                onClick={() => handleDeleteContainer(editingContainer.container)}
+                type="button"
+                variant="ghost"
+              >
+                Smazat nádobu
+              </Button>
+            ) : null}
           </form>
         </div>
       </Sheet>
@@ -404,7 +593,7 @@ export function PlacesScreen() {
           {locations.map((location) => (
             <article className="place-tree__location" key={location.id}>
               <div className="place-tree__header">
-                <div>
+                <div className="place-tree__header-info">
                   <Text variant="title">{location.name}</Text>
                   <Text as="small" variant="caption">
                     {formatLocationCoordinates(
@@ -416,6 +605,18 @@ export function PlacesScreen() {
                     latitude={location.latitude}
                     locationId={location.id}
                     longitude={location.longitude}
+                  />
+                </div>
+                <div className="place-tree__row-actions">
+                  <IconButton
+                    icon={<Pencil aria-hidden="true" size={16} />}
+                    label="Upravit místo"
+                    onClick={() => openEditLocationSheet(location)}
+                  />
+                  <IconButton
+                    icon={<Trash2 aria-hidden="true" size={16} />}
+                    label="Smazat místo"
+                    onClick={() => handleDeleteLocation(location)}
                   />
                 </div>
               </div>
@@ -437,7 +638,21 @@ export function PlacesScreen() {
 
               {location.zones.map((zone) => (
                 <section className="place-tree__zone" key={zone.id}>
-                  <Text variant="title">{zone.name}</Text>
+                  <div className="place-tree__zone-header">
+                    <Text variant="title">{zone.name}</Text>
+                    <div className="place-tree__row-actions">
+                      <IconButton
+                        icon={<Pencil aria-hidden="true" size={16} />}
+                        label="Upravit zónu"
+                        onClick={() => openEditZoneSheet(zone, location.id)}
+                      />
+                      <IconButton
+                        icon={<Trash2 aria-hidden="true" size={16} />}
+                        label="Smazat zónu"
+                        onClick={() => handleDeleteZone(zone)}
+                      />
+                    </div>
+                  </div>
 
                   {zone.containers.length === 0 ? (
                     <Text as="p" variant="caption" className="place-tree__empty">
@@ -450,6 +665,18 @@ export function PlacesScreen() {
                       <Text as="span" variant="body">
                         {container.name}
                       </Text>
+                      <div className="place-tree__row-actions">
+                        <IconButton
+                          icon={<Pencil aria-hidden="true" size={16} />}
+                          label="Upravit nádobu"
+                          onClick={() => openEditContainerSheet(container, zone.id)}
+                        />
+                        <IconButton
+                          icon={<Trash2 aria-hidden="true" size={16} />}
+                          label="Smazat nádobu"
+                          onClick={() => handleDeleteContainer(container)}
+                        />
+                      </div>
                     </div>
                   ))}
 
@@ -491,6 +718,17 @@ function formatLocationCoordinates(
   }
 
   return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+}
+
+function formatCoordinatesForInput(
+  latitude: number | null,
+  longitude: number | null,
+) {
+  if (latitude == null || longitude == null) {
+    return '';
+  }
+
+  return `${latitude}, ${longitude}`;
 }
 
 function parseCoordinates(value: string) {

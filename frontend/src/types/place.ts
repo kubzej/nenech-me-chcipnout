@@ -2,8 +2,10 @@ export type ContainerListItem = {
   id: string;
   name: string;
   container_type: string;
+  approx_volume_l: number | null;
   drainage: string;
   self_watering: boolean;
+  notes: string | null;
   zone_id: string;
   zone_name: string;
   environment: string;
@@ -18,8 +20,10 @@ export type PlaceContainerOverview = {
   id: string;
   name: string;
   container_type: string;
+  approx_volume_l: number | null;
   drainage: string;
   self_watering: boolean;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 };

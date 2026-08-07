@@ -53,6 +53,48 @@ export async function apiPostAuthed<T>(path: string, body: unknown): Promise<T> 
   return apiPost<T>(path, body, accessToken);
 }
 
+export async function apiPatch<T>(
+  path: string,
+  body: unknown,
+  accessToken?: string,
+): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw await parseApiError(response);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function apiPatchAuthed<T>(path: string, body: unknown): Promise<T> {
+  const accessToken = await getAccessToken();
+  return apiPatch<T>(path, body, accessToken);
+}
+
+export async function apiDelete(path: string, accessToken?: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: "DELETE",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+
+  if (!response.ok) {
+    throw await parseApiError(response);
+  }
+}
+
+export async function apiDeleteAuthed(path: string): Promise<void> {
+  const accessToken = await getAccessToken();
+  return apiDelete(path, accessToken);
+}
+
 async function getAccessToken(): Promise<string> {
   if (!supabase) {
     throw new Error("Supabase env není nastavené.");

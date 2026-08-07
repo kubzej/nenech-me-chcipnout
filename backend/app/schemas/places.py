@@ -35,8 +35,10 @@ class ContainerListItem(BaseModel):
     id: UUID
     name: str
     container_type: str
+    approx_volume_l: float | None
     drainage: str
     self_watering: bool
+    notes: str | None
     zone_id: UUID
     zone_name: str
     environment: str
@@ -51,8 +53,10 @@ class PlaceContainerOverview(BaseModel):
     id: UUID
     name: str
     container_type: str
+    approx_volume_l: float | None
     drainage: str
     self_watering: bool
+    notes: str | None
     created_at: datetime
     updated_at: datetime
 
