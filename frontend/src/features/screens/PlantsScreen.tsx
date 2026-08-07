@@ -3,6 +3,7 @@ import { Leaf } from "lucide-react";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
 import { SkeletonCard } from "../../components/ui/SkeletonCard";
+import { Text } from "../../components/ui/Text";
 import { apiGetAuthed } from "../../lib/api";
 import type { KytkaListItem } from "../../types/kytka";
 import "./screen.css";
@@ -47,7 +48,11 @@ export function PlantsScreen() {
       <ScreenHeader title="Kytky" subtitle="Tvoje aktuální oběti" />
 
       {isLoading ? <SkeletonCard aria-label="Načítám kytky" lines={1} /> : null}
-      {error ? <p className="screen__error">{error}</p> : null}
+      {error ? (
+        <Text as="p" variant="body" tone="danger" className="text-banner">
+          {error}
+        </Text>
+      ) : null}
 
       {!isLoading && !error && kytky.length === 0 ? (
         <EmptyState
@@ -62,14 +67,16 @@ export function PlantsScreen() {
           {kytky.map((kytka) => (
             <article className="kytka-list__item" key={kytka.id}>
               <div>
-                <strong>{kytka.display_name}</strong>
-                <p>{kytka.species_label ?? kytka.care_profile_name ?? "bez druhu"}</p>
+                <Text variant="title">{kytka.display_name}</Text>
+                <Text as="p" variant="body" tone="muted">
+                  {kytka.species_label ?? kytka.care_profile_name ?? "bez druhu"}
+                </Text>
               </div>
-              <small>
+              <Text as="small" variant="caption">
                 {[kytka.container_name, kytka.zone_name, kytka.location_name]
                   .filter(Boolean)
-                  .join(" · ") || "bez umístění"}
-              </small>
+                  .join(" / ") || "bez umístění"}
+              </Text>
             </article>
           ))}
         </div>

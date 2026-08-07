@@ -1,4 +1,5 @@
 import type { InputHTMLAttributes } from "react";
+import { Text } from "./Text";
 import "./text-field.css";
 
 type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & {
@@ -10,7 +11,9 @@ export function TextField({ id, label, ...props }: TextFieldProps) {
 
   return (
     <label className="text-field" htmlFor={inputId}>
-      <span>{label}</span>
+      <Text as="span" variant="label">
+        {label}
+      </Text>
       <input id={inputId} {...props} />
     </label>
   );

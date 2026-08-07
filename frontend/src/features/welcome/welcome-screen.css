@@ -16,9 +16,6 @@
 
 .welcome-screen__copy {
   max-width: var(--layout-max-sm);
-  color: var(--color-ink-soft);
-  font-size: var(--text-lg);
-  line-height: var(--line-normal);
 }
 
 @media (max-width: 860px) {

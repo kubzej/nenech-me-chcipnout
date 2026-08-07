@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import { Hero } from "../../components/layout/Hero";
+import { Text } from "../../components/ui/Text";
 import { AuthPanel } from "../auth/AuthPanel";
 import { WelcomeVisual } from "./WelcomeVisual";
 import "./welcome-screen.css";
@@ -30,10 +31,15 @@ export function WelcomeScreen({
       <div className="welcome-screen__content">
         <Hero title="Nenech mě chcípnout!" />
         <WelcomeVisual />
-        <p className="welcome-screen__copy">
+        <Text
+          as="p"
+          variant="body"
+          tone="muted"
+          className="welcome-screen__copy"
+        >
           Přihlas se, ať tenhle naštvaný list nemusí osobně vysvětlovat muškátům,
           proč zase umírají žízní.
-        </p>
+        </Text>
         <AuthPanel
           email={email}
           error={error}

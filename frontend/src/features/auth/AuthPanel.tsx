@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import { Panel } from "../../components/ui/Panel";
+import { Text } from "../../components/ui/Text";
 import { LoginForm } from "./LoginForm";
 import "./auth-panel.css";
 
@@ -37,7 +38,11 @@ export function AuthPanel({
           password={password}
         />
       </Panel>
-      {error ? <p className="auth-panel__error">{error}</p> : null}
+      {error ? (
+        <Text as="p" variant="body" tone="danger" className="text-banner">
+          {error}
+        </Text>
+      ) : null}
     </section>
   );
 }

@@ -1,0 +1,77 @@
+.text {
+  margin: 0;
+  font-family: var(--font-sans);
+}
+
+.text--display {
+  font-family: var(--font-display);
+  font-size: clamp(var(--text-display-min), 12vw, var(--text-display-max));
+  font-weight: 850;
+  line-height: var(--line-tight);
+}
+
+.text--heading {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: var(--line-tight);
+}
+
+.text--kicker {
+  font-size: var(--text-xl);
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.text--title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: var(--line-tight);
+}
+
+.text--label {
+  font-size: var(--text-sm);
+  font-weight: 800;
+  line-height: var(--line-tight);
+  text-transform: uppercase;
+}
+
+.text--body {
+  font-size: var(--text-md);
+  font-weight: 500;
+  line-height: var(--line-normal);
+}
+
+.text--caption {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--line-normal);
+}
+
+.text--tone-default {
+  color: var(--color-ink);
+}
+
+.text--tone-muted {
+  color: var(--color-muted);
+}
+
+.text--tone-earth {
+  color: var(--color-earth);
+}
+
+.text--tone-accent {
+  color: var(--color-leaf-dark);
+}
+
+.text--tone-danger {
+  color: var(--color-danger);
+}
+
+/* Banner chrome for error text; placed after variants so its weight wins the cascade at equal specificity. */
+.text-banner {
+  border-radius: var(--radius-md);
+  padding: var(--space-3) 14px;
+  background: var(--color-danger-bg);
+  font-weight: 700;
+}

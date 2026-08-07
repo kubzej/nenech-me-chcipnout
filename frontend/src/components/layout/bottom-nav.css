@@ -9,7 +9,6 @@
   max-width: 360px;
   margin: 0 auto;
   padding: 6px;
-  border: 1px solid var(--color-border);
   border-radius: 999px;
   background: rgba(251, 255, 243, 0.9);
   box-shadow: 0 14px 34px rgba(24, 35, 21, 0.12);

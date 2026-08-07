@@ -1,3 +1,4 @@
+import { Text } from "./Text";
 import "./status-grid.css";
 
 type StatusItem = {
@@ -14,8 +15,10 @@ export function StatusGrid({ items }: StatusGridProps) {
     <section className="status-grid" aria-label="Technický stav">
       {items.map((item) => (
         <div className="status-grid__item" key={item.label}>
-          <strong>{item.label}</strong>
-          <span>{item.value}</span>
+          <Text variant="label">{item.label}</Text>
+          <Text as="span" variant="body">
+            {item.value}
+          </Text>
         </div>
       ))}
     </section>

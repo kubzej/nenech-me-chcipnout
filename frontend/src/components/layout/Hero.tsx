@@ -1,3 +1,4 @@
+import { Text } from "../ui/Text";
 import "./hero.css";
 
 type HeroProps = {
@@ -7,7 +8,7 @@ type HeroProps = {
 export function Hero({ title }: HeroProps) {
   return (
     <section className="hero">
-      <h1>{title}</h1>
+      <Text variant="display">{title}</Text>
     </section>
   );
 }

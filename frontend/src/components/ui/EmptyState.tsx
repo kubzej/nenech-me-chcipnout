@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Text } from "./Text";
 import "./empty-state.css";
 
 type EmptyStateProps = {
@@ -21,8 +22,12 @@ export function EmptyState({
   return (
     <div className={classes}>
       {icon ? <div className="empty-state__icon">{icon}</div> : null}
-      <strong>{title}</strong>
-      {description ? <p>{description}</p> : null}
+      <Text variant="title">{title}</Text>
+      {description ? (
+        <Text variant="body" tone="muted">
+          {description}
+        </Text>
+      ) : null}
       {action ? <div className="empty-state__action">{action}</div> : null}
     </div>
   );

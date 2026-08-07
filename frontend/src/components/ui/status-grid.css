@@ -15,15 +15,10 @@
   background: var(--color-card-glass);
 }
 
-.status-grid__item strong,
-.status-grid__item span {
+.status-grid__item .text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.status-grid__item span {
-  color: var(--color-muted);
 }
 
 @media (max-width: 560px) {
