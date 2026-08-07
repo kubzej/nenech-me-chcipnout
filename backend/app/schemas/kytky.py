@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 class KytkaListItem(BaseModel):
     id: UUID
     container_id: UUID
+    care_profile_id: UUID | None
     display_name: str
-    species_label: str | None
     status: str
     acquired_on: date | None
     notes: str | None
@@ -24,8 +24,8 @@ class KytkaListItem(BaseModel):
 
 class KytkaCreateRequest(BaseModel):
     container_id: UUID
+    care_profile_id: UUID | None = None
     display_name: str = Field(min_length=1, max_length=120)
-    species_label: str | None = Field(default=None, max_length=160)
     status: Literal["ok", "monitoring", "sick", "dormant", "dead"] = "ok"
     acquired_on: date | None = None
     notes: str | None = None
@@ -39,7 +39,7 @@ class KytkaCreateRequest(BaseModel):
 
         return stripped
 
-    @field_validator("species_label", "notes")
+    @field_validator("notes")
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
         if value is None:

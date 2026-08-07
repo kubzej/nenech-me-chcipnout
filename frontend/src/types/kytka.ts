@@ -1,8 +1,8 @@
 export type KytkaListItem = {
   id: string;
   container_id: string;
+  care_profile_id: string | null;
   display_name: string;
-  species_label: string | null;
   status: string;
   acquired_on: string | null;
   notes: string | null;
@@ -17,8 +17,8 @@ export type KytkaListItem = {
 
 export type KytkaCreateRequest = {
   container_id: string;
+  care_profile_id?: string | null;
   display_name: string;
-  species_label?: string | null;
   status?: "ok" | "monitoring" | "sick" | "dormant" | "dead";
   acquired_on?: string | null;
   notes?: string | null;

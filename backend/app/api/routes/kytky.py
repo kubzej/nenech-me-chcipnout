@@ -15,7 +15,7 @@ from app.services.workspaces import get_first_workspace
 router = APIRouter(prefix="/api", tags=["kytky"])
 
 _SELECT = (
-    "id,container_id,display_name,species_label,status,acquired_on,notes,"
+    "id,container_id,care_profile_id,display_name,status,acquired_on,notes,"
     "created_at,updated_at,"
     "containers(name,zones(name,locations(name))),"
     "care_profiles(name,scientific_name)"
@@ -176,8 +176,8 @@ def _to_list_item(row: dict[str, object]) -> KytkaListItem:
     return KytkaListItem(
         id=row["id"],
         container_id=row["container_id"],
+        care_profile_id=row.get("care_profile_id"),
         display_name=str(row["display_name"]),
-        species_label=_optional_str(row.get("species_label")),
         status=str(row["status"]),
         acquired_on=row.get("acquired_on"),
         notes=_optional_str(row.get("notes")),

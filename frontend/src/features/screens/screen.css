@@ -188,11 +188,36 @@
   margin: calc(var(--space-2) * -1) 0 0;
 }
 
-.screen--settings {
+.care-profiles-back-button {
+  margin-left: -20px;
+}
+
+.settings-menu {
   display: grid;
-  align-content: start;
-  justify-items: start;
-  max-width: var(--layout-max-sm);
-  margin: 0 auto;
-  padding: var(--space-5) 0;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.settings-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: rgba(255, 255, 255, 0.64);
+  box-shadow: var(--shadow-soft);
+  color: var(--color-ink);
+  text-align: left;
+}
+
+.settings-menu__item svg:last-child {
+  margin-left: auto;
+  color: var(--color-muted);
+}
+
+.settings-menu__item:focus-visible {
+  outline: 4px solid var(--color-focus);
+  outline-offset: 2px;
 }

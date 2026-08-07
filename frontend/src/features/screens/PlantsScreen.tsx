@@ -16,6 +16,7 @@ import {
   apiPatchAuthed,
   apiPostAuthed,
 } from "../../lib/api";
+import type { CareProfileItem } from "../../types/care-profile";
 import type { KytkaCreateRequest, KytkaListItem } from "../../types/kytka";
 import type { ContainerListItem } from "../../types/place";
 import "./screen.css";
@@ -23,6 +24,7 @@ import "./screen.css";
 export function PlantsScreen() {
   const [kytky, setKytky] = useState<KytkaListItem[]>([]);
   const [containers, setContainers] = useState<ContainerListItem[]>([]);
+  const [careProfiles, setCareProfiles] = useState<CareProfileItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -30,7 +32,7 @@ export function PlantsScreen() {
   const [editingKytka, setEditingKytka] = useState<KytkaListItem | null>(null);
   const [containerId, setContainerId] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [speciesLabel, setSpeciesLabel] = useState("");
+  const [careProfileId, setCareProfileId] = useState("");
   const [kytkaStatus, setKytkaStatus] =
     useState<NonNullable<KytkaCreateRequest["status"]>>("ok");
   const [acquiredOn, setAcquiredOn] = useState("");
@@ -43,12 +45,14 @@ export function PlantsScreen() {
     }
 
     try {
-      const [kytkyData, containersData] = await Promise.all([
+      const [kytkyData, containersData, careProfilesData] = await Promise.all([
         apiGetAuthed<KytkaListItem[]>("/api/kytky"),
         apiGetAuthed<ContainerListItem[]>("/api/places/containers"),
+        apiGetAuthed<CareProfileItem[]>("/api/care-profiles"),
       ]);
       setKytky(kytkyData);
       setContainers(containersData);
+      setCareProfiles(careProfilesData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Kytky se nenačetly.");
     } finally {
@@ -66,19 +70,19 @@ export function PlantsScreen() {
       return;
     }
 
-    const payload: KytkaCreateRequest = {
-      acquired_on: acquiredOn || null,
-      container_id: containerId,
-      display_name: displayName,
-      notes: notes || null,
-      species_label: speciesLabel || null,
-      status: kytkaStatus,
-    };
-
     setError(null);
     setIsSaving(true);
 
     try {
+      const payload: KytkaCreateRequest = {
+        acquired_on: acquiredOn || null,
+        care_profile_id: careProfileId || null,
+        container_id: containerId,
+        display_name: displayName,
+        notes: notes || null,
+        status: kytkaStatus,
+      };
+
       if (editingKytka) {
         await apiPatchAuthed(`/api/kytky/${editingKytka.id}`, payload);
       } else {
@@ -99,7 +103,7 @@ export function PlantsScreen() {
     setEditingKytka(null);
     setContainerId(containers[0]?.id ?? "");
     setDisplayName("");
-    setSpeciesLabel("");
+    setCareProfileId("");
     setKytkaStatus("ok");
     setAcquiredOn("");
     setNotes("");
@@ -110,7 +114,7 @@ export function PlantsScreen() {
     setEditingKytka(kytka);
     setContainerId(kytka.container_id);
     setDisplayName(kytka.display_name);
-    setSpeciesLabel(kytka.species_label ?? "");
+    setCareProfileId(kytka.care_profile_id ?? "");
     setKytkaStatus(kytka.status as NonNullable<KytkaCreateRequest["status"]>);
     setAcquiredOn(kytka.acquired_on ?? "");
     setNotes(kytka.notes ?? "");
@@ -121,7 +125,7 @@ export function PlantsScreen() {
     setEditingKytka(null);
     setContainerId("");
     setDisplayName("");
-    setSpeciesLabel("");
+    setCareProfileId("");
     setKytkaStatus("ok");
     setAcquiredOn("");
     setNotes("");
@@ -155,6 +159,11 @@ export function PlantsScreen() {
     label: `${container.location_name} · ${container.zone_name} · ${container.name}`,
     value: container.id,
   }));
+
+  const careProfileOptions = [
+    { label: "Bez profilu", value: "" },
+    ...careProfiles.map((profile) => ({ label: profile.name, value: profile.id })),
+  ];
 
   return (
     <section
@@ -194,20 +203,20 @@ export function PlantsScreen() {
                 required
                 value={displayName}
               />
-              <TextField
-                disabled={isSaving}
-                label="Druh (nepovinné)"
-                name="species_label"
-                onChange={(event) => setSpeciesLabel(event.target.value)}
-                placeholder="Muškát"
-                value={speciesLabel}
-              />
               <PickerField
                 disabled={isSaving}
                 label="Nádoba"
                 onValueChange={(value) => setContainerId(value)}
                 options={containerOptions}
                 value={containerId}
+              />
+              <PickerField
+                disabled={isSaving}
+                label="Care profil"
+                onValueChange={(value) => setCareProfileId(value)}
+                options={careProfileOptions}
+                placeholder="Bez profilu"
+                value={careProfileId}
               />
               <ChoiceField
                 disabled={isSaving}
@@ -265,7 +274,7 @@ export function PlantsScreen() {
                 <div>
                   <Text variant="title">{kytka.display_name}</Text>
                   <Text as="p" variant="body" tone="muted">
-                    {kytka.species_label ?? kytka.care_profile_name ?? "bez druhu"}
+                    {kytka.care_profile_name ?? "bez profilu"}
                   </Text>
                 </div>
                 <IconButton

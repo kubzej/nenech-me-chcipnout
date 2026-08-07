@@ -4,7 +4,8 @@
   gap: 7px;
 }
 
-.text-field input {
+.text-field input,
+.text-field textarea {
   min-width: 0;
   width: 100%;
   border: 1px solid var(--color-border);
@@ -13,9 +14,16 @@
   color: var(--color-ink);
   background: rgba(255, 255, 255, 0.82);
   outline: none;
+  font-family: inherit;
+  font-size: var(--text-md);
 }
 
-.text-field input:focus {
+.text-field textarea {
+  resize: vertical;
+}
+
+.text-field input:focus,
+.text-field textarea:focus {
   box-shadow: 0 0 0 4px var(--color-focus);
 }
 

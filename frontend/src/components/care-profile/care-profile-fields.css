@@ -1,0 +1,12 @@
+.care-profile-ai-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.care-profile-ai-actions .button {
+  flex: 1;
+  width: auto;
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: var(--text-sm);
+}
