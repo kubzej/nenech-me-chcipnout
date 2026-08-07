@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, MapPin, Pencil, Plus } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ChoiceField } from '../../components/ui/ChoiceField';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -64,6 +64,7 @@ export function PlacesScreen() {
     container: PlaceContainerOverview;
     zoneId: string;
   } | null>(null);
+  const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null);
 
   const loadPlaces = useCallback(
     async (options: { showLoading?: boolean } = {}) => {
@@ -213,6 +214,10 @@ export function PlacesScreen() {
     } finally {
       setIsCreating(false);
     }
+  }
+
+  function toggleZone(zoneId: string) {
+    setExpandedZoneId((current) => (current === zoneId ? null : zoneId));
   }
 
   function openZoneSheet(location: PlaceLocationOverview) {
@@ -595,39 +600,97 @@ export function PlacesScreen() {
               <div className="place-tree__header">
                 <div className="place-tree__header-info">
                   <Text variant="title">{location.name}</Text>
-                  <Text as="small" variant="caption">
-                    {formatLocationCoordinates(
-                      location.latitude,
-                      location.longitude,
-                    )}
-                  </Text>
                   <LocationWeather
                     latitude={location.latitude}
                     locationId={location.id}
                     longitude={location.longitude}
                   />
                 </div>
-                <div className="place-tree__row-actions">
-                  <IconButton
-                    icon={<Pencil aria-hidden="true" size={16} />}
-                    label="Upravit místo"
-                    onClick={() => openEditLocationSheet(location)}
-                    size="sm"
-                  />
-                  <IconButton
-                    icon={<Trash2 aria-hidden="true" size={16} />}
-                    label="Smazat místo"
-                    onClick={() => handleDeleteLocation(location)}
-                    size="sm"
-                  />
-                </div>
+                <IconButton
+                  icon={<Pencil aria-hidden="true" size={16} />}
+                  label="Upravit místo"
+                  onClick={() => openEditLocationSheet(location)}
+                  size="sm"
+                />
               </div>
 
               {location.zones.length === 0 ? (
                 <Text as="p" variant="caption" className="place-tree__empty">
                   Žádná zóna.
                 </Text>
-              ) : null}
+              ) : (
+                <div className="place-tree__zone-list">
+                  {location.zones.map((zone) => {
+                    const isExpanded = expandedZoneId === zone.id;
+
+                    return (
+                      <div className="place-tree__zone" key={zone.id}>
+                        <div className="place-tree__zone-row">
+                          <button
+                            aria-expanded={isExpanded}
+                            className="place-tree__zone-toggle"
+                            onClick={() => toggleZone(zone.id)}
+                            type="button"
+                          >
+                            <Text as="span" variant="body">
+                              {zone.name}
+                            </Text>
+                            <span className="place-tree__zone-row-meta">
+                              <Text as="span" variant="caption">
+                                {formatContainerCount(zone.containers.length)}
+                              </Text>
+                              <ChevronRight
+                                aria-hidden="true"
+                                className="place-tree__zone-chevron"
+                                size={16}
+                              />
+                            </span>
+                          </button>
+                          <IconButton
+                            icon={<Pencil aria-hidden="true" size={16} />}
+                            label="Upravit zónu"
+                            onClick={() => openEditZoneSheet(zone, location.id)}
+                            size="sm"
+                          />
+                        </div>
+
+                        {isExpanded ? (
+                          <div className="place-tree__zone-body">
+                            {zone.containers.length === 0 ? (
+                              <Text as="p" variant="caption" className="place-tree__empty">
+                                Žádná nádoba.
+                              </Text>
+                            ) : (
+                              zone.containers.map((container) => (
+                                <div className="place-tree__container" key={container.id}>
+                                  <Text as="span" variant="body">
+                                    {container.name}
+                                  </Text>
+                                  <IconButton
+                                    icon={<Pencil aria-hidden="true" size={16} />}
+                                    label="Upravit nádobu"
+                                    onClick={() => openEditContainerSheet(container, zone.id)}
+                                    size="sm"
+                                  />
+                                </div>
+                              ))
+                            )}
+
+                            <button
+                              className="place-tree__add-action"
+                              onClick={() => openContainerSheet(zone)}
+                              type="button"
+                            >
+                              <Plus aria-hidden="true" size={16} />
+                              Přidat nádobu
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <button
                 className="place-tree__add-action"
@@ -637,65 +700,6 @@ export function PlacesScreen() {
                 <Plus aria-hidden="true" size={16} />
                 Přidat zónu
               </button>
-
-              {location.zones.map((zone) => (
-                <section className="place-tree__zone" key={zone.id}>
-                  <div className="place-tree__zone-header">
-                    <Text variant="title">{zone.name}</Text>
-                    <div className="place-tree__row-actions">
-                      <IconButton
-                        icon={<Pencil aria-hidden="true" size={16} />}
-                        label="Upravit zónu"
-                        onClick={() => openEditZoneSheet(zone, location.id)}
-                        size="sm"
-                      />
-                      <IconButton
-                        icon={<Trash2 aria-hidden="true" size={16} />}
-                        label="Smazat zónu"
-                        onClick={() => handleDeleteZone(zone)}
-                        size="sm"
-                      />
-                    </div>
-                  </div>
-
-                  {zone.containers.length === 0 ? (
-                    <Text as="p" variant="caption" className="place-tree__empty">
-                      Žádná nádoba.
-                    </Text>
-                  ) : null}
-
-                  {zone.containers.map((container) => (
-                    <div className="place-tree__container" key={container.id}>
-                      <Text as="span" variant="body">
-                        {container.name}
-                      </Text>
-                      <div className="place-tree__row-actions">
-                        <IconButton
-                          icon={<Pencil aria-hidden="true" size={16} />}
-                          label="Upravit nádobu"
-                          onClick={() => openEditContainerSheet(container, zone.id)}
-                          size="sm"
-                        />
-                        <IconButton
-                          icon={<Trash2 aria-hidden="true" size={16} />}
-                          label="Smazat nádobu"
-                          onClick={() => handleDeleteContainer(container)}
-                          size="sm"
-                        />
-                      </div>
-                    </div>
-                  ))}
-
-                  <button
-                    className="place-tree__add-action"
-                    onClick={() => openContainerSheet(zone)}
-                    type="button"
-                  >
-                    <Plus aria-hidden="true" size={16} />
-                    Přidat nádobu
-                  </button>
-                </section>
-              ))}
             </article>
           ))}
         </div>
@@ -715,15 +719,17 @@ export function PlacesScreen() {
   );
 }
 
-function formatLocationCoordinates(
-  latitude: number | null,
-  longitude: number | null,
-) {
-  if (latitude == null || longitude == null) {
-    return 'bez souřadnic';
+function formatContainerCount(count: number) {
+  if (count === 0) {
+    return 'žádná nádoba';
   }
-
-  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  if (count === 1) {
+    return '1 nádoba';
+  }
+  if (count >= 2 && count <= 4) {
+    return `${count} nádoby`;
+  }
+  return `${count} nádob`;
 }
 
 function formatCoordinatesForInput(
