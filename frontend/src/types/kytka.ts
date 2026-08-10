@@ -11,6 +11,7 @@ export type KytkaListItem = {
   location_name: string | null;
   care_profile_name: string | null;
   scientific_name: string | null;
+  last_watered_at: string | null;
   created_at: string;
   updated_at: string;
 };

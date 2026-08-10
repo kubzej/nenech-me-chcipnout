@@ -518,7 +518,7 @@ function parseMonths(value: string): number[] | null {
   return months.length > 0 ? months : null;
 }
 
-const MOISTURE_OPTIONS = [
+export const MOISTURE_OPTIONS = [
   { label: "Nevím", value: "unknown" },
   { label: "Proschnout mezi", value: "dry_between" },
   { label: "Mírně vlhko", value: "slightly_moist" },
@@ -526,14 +526,14 @@ const MOISTURE_OPTIONS = [
   { label: "Mokro", value: "wet" },
 ] as const;
 
-const LEVEL_OPTIONS = [
+export const LEVEL_OPTIONS = [
   { label: "Nevím", value: "unknown" },
   { label: "Nízké", value: "low" },
   { label: "Střední", value: "medium" },
   { label: "Vysoké", value: "high" },
 ] as const;
 
-const LIGHT_NEED_OPTIONS = [
+export const LIGHT_NEED_OPTIONS = [
   { label: "Nevím", value: "unknown" },
   { label: "Plné slunce", value: "full_sun" },
   { label: "Poloslunce", value: "partial_sun" },

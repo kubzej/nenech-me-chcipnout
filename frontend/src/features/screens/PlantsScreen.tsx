@@ -1,9 +1,9 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Leaf, Pencil, Plus } from "lucide-react";
+import { Droplets, Leaf, Plus } from "lucide-react";
+import { KytkaDetailScreen } from "./KytkaDetailScreen";
 import { Button } from "../../components/ui/Button";
 import { ChoiceField } from "../../components/ui/ChoiceField";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { IconButton } from "../../components/ui/IconButton";
 import { PickerField } from "../../components/ui/PickerField";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
 import { Sheet } from "../../components/ui/Sheet";
@@ -16,6 +16,7 @@ import {
   apiPatchAuthed,
   apiPostAuthed,
 } from "../../lib/api";
+import { formatLastWatered } from "../../lib/relativeDays";
 import type { CareProfileItem } from "../../types/care-profile";
 import type { KytkaCreateRequest, KytkaListItem } from "../../types/kytka";
 import type { ContainerListItem } from "../../types/place";
@@ -37,6 +38,9 @@ export function PlantsScreen() {
     useState<NonNullable<KytkaCreateRequest["status"]>>("ok");
   const [acquiredOn, setAcquiredOn] = useState("");
   const [notes, setNotes] = useState("");
+  const [selectedKytkaId, setSelectedKytkaId] = useState<string | null>(null);
+  const [wateringId, setWateringId] = useState<string | null>(null);
+  const [justWateredId, setJustWateredId] = useState<string | null>(null);
 
   const loadData = useCallback(async (options: { showLoading?: boolean } = {}) => {
     setError(null);
@@ -145,6 +149,7 @@ export function PlantsScreen() {
     try {
       await apiDeleteAuthed(`/api/kytky/${kytka.id}`);
       resetForm();
+      setSelectedKytkaId(null);
       await loadData({ showLoading: false });
     } catch (deleteError) {
       setError(
@@ -152,6 +157,31 @@ export function PlantsScreen() {
           ? deleteError.message
           : "Kytku se nepodařilo smazat.",
       );
+    }
+  }
+
+  async function handleZalito(kytka: KytkaListItem) {
+    setError(null);
+    setWateringId(kytka.id);
+
+    try {
+      await apiPostAuthed("/api/care-events", {
+        kytka_id: kytka.id,
+        event_type: "watering",
+      });
+      await loadData({ showLoading: false });
+      setJustWateredId(kytka.id);
+      setTimeout(() => {
+        setJustWateredId((current) => (current === kytka.id ? null : current));
+      }, 2000);
+    } catch (zalitoError) {
+      setError(
+        zalitoError instanceof Error
+          ? zalitoError.message
+          : "Zalití se nepodařilo uložit.",
+      );
+    } finally {
+      setWateringId(null);
     }
   }
 
@@ -164,6 +194,105 @@ export function PlantsScreen() {
     { label: "Bez profilu", value: "" },
     ...careProfiles.map((profile) => ({ label: profile.name, value: profile.id })),
   ];
+
+  const selectedKytka = kytky.find((kytka) => kytka.id === selectedKytkaId) ?? null;
+
+  const kytkaEditSheet = (
+    <Sheet
+      isOpen={isCreateSheetOpen || editingKytka !== null}
+      onClose={resetForm}
+      title={editingKytka ? `Upravit kytku: ${editingKytka.display_name}` : "Nová kytka"}
+    >
+      {containers.length === 0 ? (
+        <Text as="p" variant="body" tone="muted">
+          Nejdřív si v Místech založ aspoň jednu nádobu — kytka se musí zasadit
+          někam konkrétně.
+        </Text>
+      ) : (
+        <div className="location-form">
+          <form onSubmit={handleSubmitKytka}>
+            <TextField
+              disabled={isSaving}
+              label="Název"
+              name="display_name"
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Muškát z balkonu"
+              required
+              value={displayName}
+            />
+            <PickerField
+              disabled={isSaving}
+              label="Nádoba"
+              onValueChange={(value) => setContainerId(value)}
+              options={containerOptions}
+              value={containerId}
+            />
+            <PickerField
+              disabled={isSaving}
+              label="Care profil"
+              onValueChange={(value) => setCareProfileId(value)}
+              options={careProfileOptions}
+              placeholder="Bez profilu"
+              value={careProfileId}
+            />
+            <ChoiceField
+              disabled={isSaving}
+              label="Stav"
+              onValueChange={(value) => setKytkaStatus(value)}
+              options={STATUS_OPTIONS}
+              value={kytkaStatus}
+            />
+            <TextField
+              disabled={isSaving}
+              label="Pořízeno (nepovinné)"
+              name="acquired_on"
+              onChange={(event) => setAcquiredOn(event.target.value)}
+              type="date"
+              value={acquiredOn}
+            />
+            <TextField
+              disabled={isSaving}
+              label="Poznámka (nepovinné)"
+              name="notes"
+              onChange={(event) => setNotes(event.target.value)}
+              value={notes}
+            />
+            <Button disabled={isSaving} type="submit">
+              {isSaving ? "Ukládám..." : editingKytka ? "Uložit změny" : "Uložit kytku"}
+            </Button>
+            {editingKytka ? (
+              <Button
+                disabled={isSaving}
+                onClick={() => handleDeleteKytka(editingKytka)}
+                type="button"
+                variant="ghost"
+              >
+                Smazat kytku
+              </Button>
+            ) : null}
+          </form>
+        </div>
+      )}
+    </Sheet>
+  );
+
+  if (selectedKytka) {
+    const matchingProfile =
+      careProfiles.find((profile) => profile.id === selectedKytka.care_profile_id) ?? null;
+
+    return (
+      <>
+        {kytkaEditSheet}
+        <KytkaDetailScreen
+          careProfile={matchingProfile}
+          kytka={selectedKytka}
+          onBack={() => setSelectedKytkaId(null)}
+          onDataChanged={() => loadData({ showLoading: false })}
+          onEdit={() => openEditSheet(selectedKytka)}
+        />
+      </>
+    );
+  }
 
   return (
     <section
@@ -179,84 +308,7 @@ export function PlantsScreen() {
         </Text>
       ) : null}
 
-      <Sheet
-        isOpen={isCreateSheetOpen || editingKytka !== null}
-        onClose={resetForm}
-        title={
-          editingKytka ? `Upravit kytku: ${editingKytka.display_name}` : "Nová kytka"
-        }
-      >
-        {containers.length === 0 ? (
-          <Text as="p" variant="body" tone="muted">
-            Nejdřív si v Místech založ aspoň jednu nádobu — kytka se musí zasadit
-            někam konkrétně.
-          </Text>
-        ) : (
-          <div className="location-form">
-            <form onSubmit={handleSubmitKytka}>
-              <TextField
-                disabled={isSaving}
-                label="Název"
-                name="display_name"
-                onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="Muškát z balkonu"
-                required
-                value={displayName}
-              />
-              <PickerField
-                disabled={isSaving}
-                label="Nádoba"
-                onValueChange={(value) => setContainerId(value)}
-                options={containerOptions}
-                value={containerId}
-              />
-              <PickerField
-                disabled={isSaving}
-                label="Care profil"
-                onValueChange={(value) => setCareProfileId(value)}
-                options={careProfileOptions}
-                placeholder="Bez profilu"
-                value={careProfileId}
-              />
-              <ChoiceField
-                disabled={isSaving}
-                label="Stav"
-                onValueChange={(value) => setKytkaStatus(value)}
-                options={STATUS_OPTIONS}
-                value={kytkaStatus}
-              />
-              <TextField
-                disabled={isSaving}
-                label="Pořízeno (nepovinné)"
-                name="acquired_on"
-                onChange={(event) => setAcquiredOn(event.target.value)}
-                type="date"
-                value={acquiredOn}
-              />
-              <TextField
-                disabled={isSaving}
-                label="Poznámka (nepovinné)"
-                name="notes"
-                onChange={(event) => setNotes(event.target.value)}
-                value={notes}
-              />
-              <Button disabled={isSaving} type="submit">
-                {isSaving ? "Ukládám..." : editingKytka ? "Uložit změny" : "Uložit kytku"}
-              </Button>
-              {editingKytka ? (
-                <Button
-                  disabled={isSaving}
-                  onClick={() => handleDeleteKytka(editingKytka)}
-                  type="button"
-                  variant="ghost"
-                >
-                  Smazat kytku
-                </Button>
-              ) : null}
-            </form>
-          </div>
-        )}
-      </Sheet>
+      {kytkaEditSheet}
 
       {!isLoading && !error && kytky.length === 0 ? (
         <EmptyState
@@ -270,38 +322,57 @@ export function PlantsScreen() {
         <div className="kytka-list">
           {kytky.map((kytka) => (
             <article className="kytka-list__item" key={kytka.id}>
-              <div className="kytka-list__item-header">
-                <div>
-                  <Text variant="title">{kytka.display_name}</Text>
-                  <Text as="p" variant="body" tone="muted">
-                    {kytka.care_profile_name ?? "bez profilu"}
-                  </Text>
-                </div>
-                <IconButton
-                  icon={<Pencil aria-hidden="true" size={16} />}
-                  label="Upravit kytku"
-                  onClick={() => openEditSheet(kytka)}
-                  size="sm"
-                />
-              </div>
-              <Text as="small" variant="caption">
-                {[kytka.location_name, kytka.zone_name, kytka.container_name]
-                  .filter(Boolean)
-                  .join(" / ") || "bez umístění"}
-              </Text>
-              {kytka.status !== "ok" ? (
-                <Text
-                  as="small"
-                  variant="caption"
-                  tone={
-                    kytka.status === "sick" || kytka.status === "dead"
-                      ? "danger"
-                      : "muted"
-                  }
-                >
-                  {formatStatus(kytka.status)}
+              <button
+                className="kytka-list__item-toggle"
+                onClick={() => setSelectedKytkaId(kytka.id)}
+                type="button"
+              >
+                <Text variant="title">{kytka.display_name}</Text>
+                <Text as="p" variant="body" tone="muted">
+                  {kytka.care_profile_name ?? "bez profilu"}
                 </Text>
-              ) : null}
+                <Text as="small" variant="caption">
+                  {[kytka.location_name, kytka.zone_name, kytka.container_name]
+                    .filter(Boolean)
+                    .join(" / ") || "bez umístění"}
+                </Text>
+                {kytka.status !== "ok" ? (
+                  <Text
+                    as="small"
+                    variant="caption"
+                    tone={
+                      kytka.status === "sick" || kytka.status === "dead"
+                        ? "danger"
+                        : "muted"
+                    }
+                  >
+                    {formatStatus(kytka.status)}
+                  </Text>
+                ) : null}
+              </button>
+              <div className="kytka-list__item-footer">
+                <Button
+                  disabled={wateringId === kytka.id}
+                  icon={<Droplets aria-hidden="true" size={16} />}
+                  onClick={() => handleZalito(kytka)}
+                  type="button"
+                  variant="ghost"
+                >
+                  {wateringId === kytka.id
+                    ? "Ukládám..."
+                    : justWateredId === kytka.id
+                      ? "Zalito!"
+                      : "Zalito"}
+                </Button>
+                <Text
+                  as="span"
+                  className="kytka-list__item-footer-hint"
+                  tone="muted"
+                  variant="caption"
+                >
+                  {formatLastWatered(kytka.last_watered_at)}
+                </Text>
+              </div>
             </article>
           ))}
         </div>

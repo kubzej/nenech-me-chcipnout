@@ -18,6 +18,7 @@ class KytkaListItem(BaseModel):
     location_name: str | None
     care_profile_name: str | None
     scientific_name: str | None
+    last_watered_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

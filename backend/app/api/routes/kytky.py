@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 import httpx
@@ -41,7 +42,32 @@ async def list_kytky(
         )
         raise_supabase_error(response)
 
-    return [_to_list_item(row) for row in response.json()]
+        watering_response = await client.get(
+            "/care_events",
+            headers=headers,
+            params={
+                "select": "container_id,occurred_at",
+                "workspace_id": f"eq.{workspace['id']}",
+                "event_type": "eq.watering",
+            },
+        )
+        raise_supabase_error(watering_response)
+
+    last_watered_by_container: dict[str, datetime] = {}
+    for event in watering_response.json():
+        container_id = event.get("container_id")
+        occurred_at = event.get("occurred_at")
+        if container_id is None or occurred_at is None:
+            continue
+        parsed = datetime.fromisoformat(occurred_at)
+        current = last_watered_by_container.get(container_id)
+        if current is None or parsed > current:
+            last_watered_by_container[container_id] = parsed
+
+    return [
+        _to_list_item(row, last_watered_by_container.get(row["container_id"]))
+        for row in response.json()
+    ]
 
 
 @router.post("/kytky", response_model=KytkaListItem)
@@ -167,7 +193,9 @@ async def _insert_one(
     return rows[0]
 
 
-def _to_list_item(row: dict[str, object]) -> KytkaListItem:
+def _to_list_item(
+    row: dict[str, object], last_watered_at: datetime | None = None
+) -> KytkaListItem:
     container = _nested_dict(row.get("containers"))
     zone = _nested_dict(container.get("zones"))
     location = _nested_dict(zone.get("locations"))
@@ -186,6 +214,7 @@ def _to_list_item(row: dict[str, object]) -> KytkaListItem:
         location_name=_optional_str(location.get("name")),
         care_profile_name=_optional_str(care_profile.get("name")),
         scientific_name=_optional_str(care_profile.get("scientific_name")),
+        last_watered_at=last_watered_at,
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
