@@ -12,6 +12,8 @@ export type KytkaListItem = {
   care_profile_name: string | null;
   scientific_name: string | null;
   last_watered_at: string | null;
+  primary_photo_bucket: string | null;
+  primary_photo_path: string | null;
   created_at: string;
   updated_at: string;
 };

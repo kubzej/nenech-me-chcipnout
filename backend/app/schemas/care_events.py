@@ -12,6 +12,7 @@ CareEventType = Literal[
     "treatment",
     "maintenance",
     "weather_protection",
+    "photo_observation",
 ]
 
 CareEventCondition = Literal[

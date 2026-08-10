@@ -10,7 +10,7 @@ from app.core.supabase_rest import (
     supabase_rest_url,
     supabase_user_headers,
 )
-from app.schemas.kytky import KytkaCreateRequest, KytkaListItem
+from app.schemas.kytky import KytkaAvatarRequest, KytkaCreateRequest, KytkaListItem
 from app.services.workspaces import get_first_workspace
 
 router = APIRouter(prefix="/api", tags=["kytky"])
@@ -19,7 +19,8 @@ _SELECT = (
     "id,container_id,care_profile_id,display_name,status,acquired_on,notes,"
     "created_at,updated_at,"
     "containers(name,zones(name,locations(name))),"
-    "care_profiles(name,scientific_name)"
+    "care_profiles(name,scientific_name),"
+    "primary_photo:plant_photos!kytky_primary_photo_id_fkey(storage_bucket,storage_path)"
 )
 
 
@@ -118,6 +119,52 @@ async def update_kytka(
     return _to_list_item(row)
 
 
+@router.post("/kytky/{kytka_id}/avatar", response_model=KytkaListItem)
+async def set_kytka_avatar(
+    kytka_id: UUID,
+    payload: KytkaAvatarRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> KytkaListItem:
+    workspace = await _require_workspace(current_user)
+    headers = supabase_user_headers(current_user.access_token)
+
+    async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
+        photo_response = await client.get(
+            "/plant_photos",
+            headers=headers,
+            params={
+                "select": "id",
+                "id": f"eq.{payload.photo_id}",
+                "kytka_id": f"eq.{kytka_id}",
+                "workspace_id": f"eq.{workspace['id']}",
+                "limit": "1",
+            },
+        )
+        raise_supabase_error(photo_response)
+        if not photo_response.json():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
+            )
+
+        response = await client.patch(
+            "/kytky",
+            headers=_insert_headers(current_user),
+            params={"id": f"eq.{kytka_id}", "workspace_id": f"eq.{workspace['id']}"},
+            json={"primary_photo_id": str(payload.photo_id)},
+        )
+        raise_supabase_error(response)
+
+        rows = response.json()
+        if not rows:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Kytka not found"
+            )
+
+        row = await _read_one(client, current_user, rows[0]["id"])
+
+    return _to_list_item(row)
+
+
 @router.delete("/kytky/{kytka_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_kytka(
     kytka_id: UUID,
@@ -200,6 +247,7 @@ def _to_list_item(
     zone = _nested_dict(container.get("zones"))
     location = _nested_dict(zone.get("locations"))
     care_profile = _nested_dict(row.get("care_profiles"))
+    primary_photo = _nested_dict(row.get("primary_photo"))
 
     return KytkaListItem(
         id=row["id"],
@@ -215,6 +263,8 @@ def _to_list_item(
         care_profile_name=_optional_str(care_profile.get("name")),
         scientific_name=_optional_str(care_profile.get("scientific_name")),
         last_watered_at=last_watered_at,
+        primary_photo_bucket=_optional_str(primary_photo.get("storage_bucket")),
+        primary_photo_path=_optional_str(primary_photo.get("storage_path")),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )

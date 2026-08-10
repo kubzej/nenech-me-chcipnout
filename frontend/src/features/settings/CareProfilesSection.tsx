@@ -147,7 +147,7 @@ export function CareProfilesSection({ onBack }: CareProfilesSectionProps) {
           </Button>
         }
         title="Care profily"
-        subtitle="Jak se o co starat"
+        subtitle="Návod, než je zabiješ"
       />
 
       {isLoading ? <SkeletonCard aria-label="Načítám care profily" lines={1} /> : null}

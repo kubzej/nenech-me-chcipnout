@@ -1,4 +1,5 @@
 import { ChoiceField } from "../ui/ChoiceField";
+import { Text } from "../ui/Text";
 import { TextField } from "../ui/TextField";
 import type { CareEventCreateRequest } from "../../types/care-event";
 
@@ -14,6 +15,8 @@ export const DEFAULT_CARE_EVENT_VALUES: Omit<CareEventCreateRequest, "kytka_id">
 type CareEventFieldsProps = {
   disabled?: boolean;
   onChange: (patch: Partial<Omit<CareEventCreateRequest, "kytka_id">>) => void;
+  onPhotoChange?: (file: File | null) => void;
+  photoFile?: File | null;
   showOccurredAt?: boolean;
   values: Omit<CareEventCreateRequest, "kytka_id">;
 };
@@ -21,6 +24,8 @@ type CareEventFieldsProps = {
 export function CareEventFields({
   disabled = false,
   onChange,
+  onPhotoChange,
+  photoFile,
   showOccurredAt = false,
   values,
 }: CareEventFieldsProps) {
@@ -93,6 +98,25 @@ export function CareEventFields({
           options={CONDITION_OPTIONS}
           value={values.condition ?? "unknown"}
         />
+      ) : null}
+      {showCondition && onPhotoChange ? (
+        <label className="text-field">
+          <Text as="span" variant="label">
+            Foto (nepovinné)
+          </Text>
+          <input
+            accept="image/*"
+            capture="environment"
+            disabled={disabled}
+            onChange={(event) => onPhotoChange(event.target.files?.[0] ?? null)}
+            type="file"
+          />
+          {photoFile ? (
+            <Text as="span" variant="caption" tone="muted">
+              {photoFile.name}
+            </Text>
+          ) : null}
+        </label>
       ) : null}
       <TextField
         disabled={disabled}

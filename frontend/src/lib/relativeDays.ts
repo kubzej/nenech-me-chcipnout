@@ -1,11 +1,11 @@
-export function formatLastWatered(iso: string | null): string {
+function daysSince(iso: string | null): number | null {
   if (!iso) {
-    return "Ještě nezalito";
+    return null;
   }
 
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) {
-    return "Ještě nezalito";
+    return null;
   }
 
   const startOfThen = new Date(then.getFullYear(), then.getMonth(), then.getDate());
@@ -15,10 +15,18 @@ export function formatLastWatered(iso: string | null): string {
     startOfNow.getMonth(),
     startOfNow.getDate(),
   );
-  const diffDays = Math.round(
+
+  return Math.round(
     (startOfToday.getTime() - startOfThen.getTime()) / (1000 * 60 * 60 * 24),
   );
+}
 
+export function formatLastWatered(iso: string | null): string {
+  const diffDays = daysSince(iso);
+
+  if (diffDays === null) {
+    return "Ještě nezalito";
+  }
   if (diffDays <= 0) {
     return "Zalito dnes";
   }
@@ -26,4 +34,9 @@ export function formatLastWatered(iso: string | null): string {
     return "Zalito včera";
   }
   return `Zalito před ${diffDays} dny`;
+}
+
+export function isWateredToday(iso: string | null): boolean {
+  const diffDays = daysSince(iso);
+  return diffDays !== null && diffDays <= 0;
 }

@@ -14,6 +14,7 @@ from app.schemas.care_events import (
     CareEventItem,
     CareEventType,
 )
+from app.services.kytka_status import maybe_transition_from_condition
 from app.services.workspaces import get_first_workspace
 
 router = APIRouter(prefix="/api", tags=["care-events"])
@@ -48,6 +49,14 @@ async def create_care_event(
             del insert_payload["occurred_at"]
 
         row = await _insert_one(client, current_user, insert_payload)
+
+    await maybe_transition_from_condition(
+        headers,
+        workspace["id"],
+        payload.kytka_id,
+        payload.event_type,
+        payload.condition,
+    )
 
     return CareEventItem(**row)
 
@@ -122,6 +131,14 @@ async def update_care_event(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Care event not found"
             )
 
+    await maybe_transition_from_condition(
+        headers,
+        workspace["id"],
+        payload.kytka_id,
+        payload.event_type,
+        payload.condition,
+    )
+
     return CareEventItem(**rows[0])
 
 
@@ -174,7 +191,9 @@ async def _require_kytka(
 
     rows = response.json()
     if not rows:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kytka not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Kytka not found"
+        )
 
     return rows[0]
 

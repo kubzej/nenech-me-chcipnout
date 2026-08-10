@@ -19,6 +19,8 @@ class KytkaListItem(BaseModel):
     care_profile_name: str | None
     scientific_name: str | None
     last_watered_at: datetime | None
+    primary_photo_bucket: str | None
+    primary_photo_path: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -48,3 +50,7 @@ class KytkaCreateRequest(BaseModel):
 
         stripped = value.strip()
         return stripped or None
+
+
+class KytkaAvatarRequest(BaseModel):
+    photo_id: UUID

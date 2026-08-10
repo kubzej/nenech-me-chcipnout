@@ -1,12 +1,21 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   ArrowLeft,
   Bug,
+  Camera,
   CloudSun,
   Droplets,
   Eye,
+  Image as ImageIcon,
   Pencil,
   Plus,
   Sprout,
@@ -25,22 +34,27 @@ import {
   CONDITION_OPTIONS,
   DEFAULT_CARE_EVENT_VALUES,
 } from "../../components/care-event/CareEventFields";
+import { PlantAvatar } from "../../components/avatar/PlantAvatar";
 import { Button } from "../../components/ui/Button";
+import { ChoiceField } from "../../components/ui/ChoiceField";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { IconButton } from "../../components/ui/IconButton";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
 import { Sheet } from "../../components/ui/Sheet";
 import { SkeletonCard } from "../../components/ui/SkeletonCard";
 import { Text } from "../../components/ui/Text";
+import { TextField } from "../../components/ui/TextField";
 import {
   apiDeleteAuthed,
   apiGetAuthed,
   apiPatchAuthed,
   apiPostAuthed,
 } from "../../lib/api";
+import { uploadPlantPhoto } from "../../lib/photoUpload";
 import type { CareEventCreateRequest, CareEventItem } from "../../types/care-event";
 import type { CareProfileItem } from "../../types/care-profile";
 import type { KytkaListItem } from "../../types/kytka";
+import type { PlantPhotoItem } from "../../types/plant-photo";
 import "./screen.css";
 
 type KytkaDetailScreenProps = {
@@ -59,6 +73,7 @@ export function KytkaDetailScreen({
   onEdit,
 }: KytkaDetailScreenProps) {
   const [events, setEvents] = useState<CareEventItem[]>([]);
+  const [photos, setPhotos] = useState<PlantPhotoItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -67,14 +82,27 @@ export function KytkaDetailScreen({
   const [formValues, setFormValues] = useState<Omit<CareEventCreateRequest, "kytka_id">>(
     DEFAULT_CARE_EVENT_VALUES,
   );
+  const [eventPhotoFile, setEventPhotoFile] = useState<File | null>(null);
 
-  const loadEvents = useCallback(async () => {
+  const fotoInputRef = useRef<HTMLInputElement>(null);
+  const [standalonePhotoFile, setStandalonePhotoFile] = useState<File | null>(null);
+  const [standaloneNote, setStandaloneNote] = useState("");
+  const [standaloneHealth, setStandaloneHealth] = useState("unknown");
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState<PlantPhotoItem | null>(null);
+  const [isSettingAvatar, setIsSettingAvatar] = useState(false);
+
+  const loadTimeline = useCallback(async () => {
     setError(null);
     setIsLoading(true);
 
     try {
-      const data = await apiGetAuthed<CareEventItem[]>(`/api/kytky/${kytka.id}/events`);
-      setEvents(data);
+      const [eventsData, photosData] = await Promise.all([
+        apiGetAuthed<CareEventItem[]>(`/api/kytky/${kytka.id}/events`),
+        apiGetAuthed<PlantPhotoItem[]>(`/api/kytky/${kytka.id}/photos`),
+      ]);
+      setEvents(eventsData);
+      setPhotos(photosData);
     } catch (loadError) {
       setError(
         loadError instanceof Error ? loadError.message : "Historie se nenačetla.",
@@ -85,17 +113,19 @@ export function KytkaDetailScreen({
   }, [kytka.id]);
 
   useEffect(() => {
-    void loadEvents();
-  }, [loadEvents]);
+    void loadTimeline();
+  }, [loadTimeline]);
 
   function openCreateEventSheet() {
     setEditingEvent(null);
     setFormValues(DEFAULT_CARE_EVENT_VALUES);
+    setEventPhotoFile(null);
     setIsEventSheetOpen(true);
   }
 
   function openEditEventSheet(event: CareEventItem) {
     setEditingEvent(event);
+    setEventPhotoFile(null);
     setFormValues({
       event_type: event.event_type as CareEventCreateRequest["event_type"],
       occurred_at: event.occurred_at,
@@ -110,6 +140,7 @@ export function KytkaDetailScreen({
     setIsEventSheetOpen(false);
     setEditingEvent(null);
     setFormValues(DEFAULT_CARE_EVENT_VALUES);
+    setEventPhotoFile(null);
   }
 
   async function handleSubmitEvent(event: FormEvent<HTMLFormElement>) {
@@ -120,13 +151,24 @@ export function KytkaDetailScreen({
     const payload: CareEventCreateRequest = { kytka_id: kytka.id, ...formValues };
 
     try {
-      if (editingEvent) {
-        await apiPatchAuthed(`/api/care-events/${editingEvent.id}`, payload);
-      } else {
-        await apiPostAuthed("/api/care-events", payload);
+      const savedEvent = editingEvent
+        ? await apiPatchAuthed<CareEventItem>(
+            `/api/care-events/${editingEvent.id}`,
+            payload,
+          )
+        : await apiPostAuthed<CareEventItem>("/api/care-events", payload);
+
+      if (eventPhotoFile) {
+        const uploaded = await uploadPlantPhoto(kytka.id, eventPhotoFile);
+        await apiPostAuthed("/api/plant-photos", {
+          kytka_id: kytka.id,
+          storage_path: uploaded.storagePath,
+          care_event_id: savedEvent.id,
+        });
       }
+
       resetEventForm();
-      await loadEvents();
+      await loadTimeline();
       onDataChanged();
     } catch (saveError) {
       setError(
@@ -147,7 +189,7 @@ export function KytkaDetailScreen({
     try {
       await apiDeleteAuthed(`/api/care-events/${event.id}`);
       resetEventForm();
-      await loadEvents();
+      await loadTimeline();
       onDataChanged();
     } catch (deleteError) {
       setError(
@@ -156,7 +198,101 @@ export function KytkaDetailScreen({
     }
   }
 
+  function openFotoPicker() {
+    fotoInputRef.current?.click();
+  }
+
+  function handleFotoSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    setStandalonePhotoFile(file);
+    setStandaloneNote("");
+    setStandaloneHealth("unknown");
+  }
+
+  function resetStandalonePhoto() {
+    setStandalonePhotoFile(null);
+    setStandaloneNote("");
+    setStandaloneHealth("unknown");
+  }
+
+  async function handleSubmitStandalonePhoto(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!standalonePhotoFile) {
+      return;
+    }
+
+    setError(null);
+    setIsUploadingPhoto(true);
+
+    try {
+      const uploaded = await uploadPlantPhoto(kytka.id, standalonePhotoFile);
+      await apiPostAuthed("/api/plant-photos", {
+        kytka_id: kytka.id,
+        storage_path: uploaded.storagePath,
+        note: standaloneNote || null,
+        health_snapshot: standaloneHealth === "unknown" ? null : standaloneHealth,
+      });
+      resetStandalonePhoto();
+      await loadTimeline();
+      onDataChanged();
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error ? uploadError.message : "Fotku se nepodařilo uložit.",
+      );
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  }
+
+  async function handleDeletePhoto(photo: PlantPhotoItem) {
+    if (!window.confirm("Smazat tuto fotku?")) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await apiDeleteAuthed(`/api/plant-photos/${photo.id}`);
+      setViewingPhoto(null);
+      await loadTimeline();
+      onDataChanged();
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error ? deleteError.message : "Fotku se nepodařilo smazat.",
+      );
+    }
+  }
+
+  async function handleSetAvatar(photo: PlantPhotoItem) {
+    setError(null);
+    setIsSettingAvatar(true);
+
+    try {
+      await apiPostAuthed(`/api/kytky/${kytka.id}/avatar`, { photo_id: photo.id });
+      setViewingPhoto(null);
+      onDataChanged();
+    } catch (avatarError) {
+      setError(
+        avatarError instanceof Error
+          ? avatarError.message
+          : "Profilovku se nepodařilo nastavit.",
+      );
+    } finally {
+      setIsSettingAvatar(false);
+    }
+  }
+
   const profileLines = careProfile ? buildProfileSummaryLines(careProfile) : [];
+  const timeline = buildTimeline(events, photos);
+  const isAnySheetOpen =
+    isEventSheetOpen ||
+    editingEvent !== null ||
+    standalonePhotoFile !== null ||
+    viewingPhoto !== null;
 
   return (
     <section
@@ -173,19 +309,45 @@ export function KytkaDetailScreen({
         >
           Zpět
         </Button>
-        <IconButton
-          icon={<Pencil aria-hidden="true" size={18} />}
-          label="Upravit kytku"
-          onClick={onEdit}
-          variant="surface"
-        />
+        <div className="kytka-detail__header-actions-group">
+          <IconButton
+            icon={<Camera aria-hidden="true" size={18} />}
+            label="Přidat foto"
+            onClick={openFotoPicker}
+            variant="surface"
+          />
+          <IconButton
+            icon={<Pencil aria-hidden="true" size={18} />}
+            label="Upravit kytku"
+            onClick={onEdit}
+            variant="surface"
+          />
+        </div>
       </div>
+
+      <input
+        accept="image/*"
+        capture="environment"
+        className="visually-hidden"
+        onChange={handleFotoSelected}
+        ref={fotoInputRef}
+        type="file"
+      />
 
       {error ? (
         <Text as="p" variant="body" tone="danger" className="text-banner">
           {error}
         </Text>
       ) : null}
+
+      <div className="kytka-detail__identity">
+        <PlantAvatar
+          bucket={kytka.primary_photo_bucket}
+          label={kytka.display_name}
+          path={kytka.primary_photo_path}
+          size="lg"
+        />
+      </div>
 
       {careProfile ? (
         <div className="entity-card kytka-detail__profile-summary">
@@ -228,7 +390,7 @@ export function KytkaDetailScreen({
 
         {isLoading ? <SkeletonCard aria-label="Načítám historii" lines={2} /> : null}
 
-        {!isLoading && events.length === 0 ? (
+        {!isLoading && timeline.length === 0 ? (
           <EmptyState
             icon={<Droplets aria-hidden="true" size={30} strokeWidth={2.1} />}
             title="Zatím žádná historie."
@@ -236,34 +398,80 @@ export function KytkaDetailScreen({
           />
         ) : null}
 
-        {events.length > 0 ? (
+        {timeline.length > 0 ? (
           <div className="entity-list">
-            {events.map((event) => {
-              const EventIcon = EVENT_TYPE_ICONS[event.event_type] ?? Droplets;
-              return (
+            {timeline.map((entry) =>
+              entry.kind === "event" ? (
+                <div className="entity-card kytka-detail__event-row" key={entry.key}>
+                  <button
+                    className="kytka-detail__event-row-main"
+                    onClick={() => openEditEventSheet(entry.event)}
+                    type="button"
+                  >
+                    <div className="kytka-detail__event-row-title">
+                      {(() => {
+                        const EventIcon =
+                          EVENT_TYPE_ICONS[entry.event.event_type] ?? Droplets;
+                        return <EventIcon aria-hidden="true" size={18} />;
+                      })()}
+                      <Text as="span" variant="title">
+                        {formatEventType(entry.event.event_type)}
+                      </Text>
+                    </div>
+                    <Text as="span" tone="muted" variant="caption">
+                      {formatEventDateTime(entry.event.occurred_at)}
+                    </Text>
+                    {formatEventDetail(entry.event) ? (
+                      <Text as="span" tone="muted" variant="caption">
+                        {formatEventDetail(entry.event)}
+                      </Text>
+                    ) : null}
+                  </button>
+                  {entry.photo ? (
+                    <button
+                      className="kytka-detail__event-thumb"
+                      onClick={() => setViewingPhoto(entry.photo)}
+                      type="button"
+                    >
+                      <PlantAvatar
+                        bucket={entry.photo.storage_bucket}
+                        label="Foto"
+                        path={entry.photo.storage_path}
+                        size="sm"
+                      />
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
                 <button
-                  className="entity-card kytka-detail__event-row"
-                  key={event.id}
-                  onClick={() => openEditEventSheet(event)}
+                  className="entity-card kytka-detail__event-row kytka-detail__event-row--photo"
+                  key={entry.key}
+                  onClick={() => setViewingPhoto(entry.photo)}
                   type="button"
                 >
                   <div className="kytka-detail__event-row-title">
-                    <EventIcon aria-hidden="true" size={18} />
+                    <ImageIcon aria-hidden="true" size={18} />
                     <Text as="span" variant="title">
-                      {formatEventType(event.event_type)}
+                      Fotka
                     </Text>
                   </div>
                   <Text as="span" tone="muted" variant="caption">
-                    {formatEventDateTime(event.occurred_at)}
+                    {formatEventDateTime(entry.timestamp)}
                   </Text>
-                  {formatEventDetail(event) ? (
+                  {entry.photo.note ? (
                     <Text as="span" tone="muted" variant="caption">
-                      {formatEventDetail(event)}
+                      {entry.photo.note}
                     </Text>
                   ) : null}
+                  <PlantAvatar
+                    bucket={entry.photo.storage_bucket}
+                    label="Foto"
+                    path={entry.photo.storage_path}
+                    size="sm"
+                  />
                 </button>
-              );
-            })}
+              ),
+            )}
           </div>
         ) : null}
       </div>
@@ -280,6 +488,8 @@ export function KytkaDetailScreen({
               onChange={(patch) =>
                 setFormValues((current) => ({ ...current, ...patch }))
               }
+              onPhotoChange={setEventPhotoFile}
+              photoFile={eventPhotoFile}
               showOccurredAt={editingEvent !== null}
               values={formValues}
             />
@@ -300,7 +510,69 @@ export function KytkaDetailScreen({
         </div>
       </Sheet>
 
-      {!isEventSheetOpen && editingEvent === null ? (
+      <Sheet
+        isOpen={standalonePhotoFile !== null}
+        onClose={resetStandalonePhoto}
+        title="Nová fotka"
+      >
+        <div className="location-form">
+          <form onSubmit={handleSubmitStandalonePhoto}>
+            <ChoiceField
+              disabled={isUploadingPhoto}
+              label="Stav rostliny"
+              onValueChange={setStandaloneHealth}
+              options={CONDITION_OPTIONS}
+              value={standaloneHealth}
+            />
+            <TextField
+              disabled={isUploadingPhoto}
+              label="Poznámka (nepovinné)"
+              onChange={(event) => setStandaloneNote(event.target.value)}
+              value={standaloneNote}
+            />
+            <Button disabled={isUploadingPhoto} type="submit">
+              {isUploadingPhoto ? "Nahrávám..." : "Uložit fotku"}
+            </Button>
+          </form>
+        </div>
+      </Sheet>
+
+      <Sheet isOpen={viewingPhoto !== null} onClose={() => setViewingPhoto(null)} title="Fotka">
+        {viewingPhoto ? (
+          <div className="kytka-detail__photo-viewer">
+            <PlantAvatar
+              bucket={viewingPhoto.storage_bucket}
+              label="Foto"
+              path={viewingPhoto.storage_path}
+              size="full"
+            />
+            {viewingPhoto.note ? (
+              <Text as="p" variant="body">
+                {viewingPhoto.note}
+              </Text>
+            ) : null}
+            <Text as="p" tone="muted" variant="caption">
+              {formatEventDateTime(viewingPhoto.captured_at ?? viewingPhoto.created_at)}
+            </Text>
+            <Button
+              disabled={isSettingAvatar}
+              onClick={() => handleSetAvatar(viewingPhoto)}
+              type="button"
+            >
+              {isSettingAvatar ? "Nastavuji..." : "Nastavit jako profilovku"}
+            </Button>
+            <Button
+              onClick={() => handleDeletePhoto(viewingPhoto)}
+              type="button"
+              variant="ghost"
+            >
+              Smazat fotku
+            </Button>
+          </div>
+        ) : null}
+      </Sheet>
+
+      {!isAnySheetOpen ? (
         <div className="screen-floating-action">
           <Button icon={<Plus aria-hidden="true" size={20} />} onClick={openCreateEventSheet}>
             Přidat event
@@ -308,6 +580,53 @@ export function KytkaDetailScreen({
         </div>
       ) : null}
     </section>
+  );
+}
+
+type TimelineEntry =
+  | {
+      kind: "event";
+      key: string;
+      timestamp: string;
+      event: CareEventItem;
+      photo: PlantPhotoItem | null;
+    }
+  | { kind: "photo"; key: string; timestamp: string; photo: PlantPhotoItem };
+
+function buildTimeline(
+  events: CareEventItem[],
+  photos: PlantPhotoItem[],
+): TimelineEntry[] {
+  const photoByEventId = new Map<string, PlantPhotoItem>();
+  const unattached: PlantPhotoItem[] = [];
+
+  for (const photo of photos) {
+    if (photo.care_event_id) {
+      photoByEventId.set(photo.care_event_id, photo);
+    } else {
+      unattached.push(photo);
+    }
+  }
+
+  const entries: TimelineEntry[] = events.map((event) => ({
+    kind: "event",
+    key: event.id,
+    timestamp: event.occurred_at,
+    event,
+    photo: photoByEventId.get(event.id) ?? null,
+  }));
+
+  for (const photo of unattached) {
+    entries.push({
+      kind: "photo",
+      key: photo.id,
+      timestamp: photo.captured_at ?? photo.created_at,
+      photo,
+    });
+  }
+
+  return entries.sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   );
 }
 

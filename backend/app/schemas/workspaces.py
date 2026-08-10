@@ -34,3 +34,8 @@ class WorkspaceResponse(BaseModel):
     timezone: str
     role: str
     created_at: datetime
+
+
+class WorkspaceMemberItem(BaseModel):
+    user_id: UUID
+    display_name: str | None

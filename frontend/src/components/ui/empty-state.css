@@ -20,6 +20,11 @@
   color: var(--color-leaf-dark);
 }
 
+.empty-state .text--title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
 .empty-state__action {
   margin-top: var(--space-1);
 }

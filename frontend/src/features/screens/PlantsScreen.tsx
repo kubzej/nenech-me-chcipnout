@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Droplets, Leaf, Plus } from "lucide-react";
 import { KytkaDetailScreen } from "./KytkaDetailScreen";
+import { PlantAvatar } from "../../components/avatar/PlantAvatar";
 import { Button } from "../../components/ui/Button";
 import { ChoiceField } from "../../components/ui/ChoiceField";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -16,7 +17,7 @@ import {
   apiPatchAuthed,
   apiPostAuthed,
 } from "../../lib/api";
-import { formatLastWatered } from "../../lib/relativeDays";
+import { isWateredToday } from "../../lib/relativeDays";
 import type { CareProfileItem } from "../../types/care-profile";
 import type { KytkaCreateRequest, KytkaListItem } from "../../types/kytka";
 import type { ContainerListItem } from "../../types/place";
@@ -313,7 +314,7 @@ export function PlantsScreen() {
       {!isLoading && !error && kytky.length === 0 ? (
         <EmptyState
           icon={<Leaf aria-hidden="true" size={30} strokeWidth={2.1} />}
-          title="Zatím tu není žádná Kytka."
+          title="Zatím žádná oběť."
           variant="inline"
         />
       ) : null}
@@ -327,28 +328,38 @@ export function PlantsScreen() {
                 onClick={() => setSelectedKytkaId(kytka.id)}
                 type="button"
               >
-                <Text variant="title">{kytka.display_name}</Text>
-                <Text as="p" variant="body" tone="muted">
-                  {kytka.care_profile_name ?? "bez profilu"}
-                </Text>
-                <Text as="small" variant="caption">
-                  {[kytka.location_name, kytka.zone_name, kytka.container_name]
-                    .filter(Boolean)
-                    .join(" / ") || "bez umístění"}
-                </Text>
-                {kytka.status !== "ok" ? (
-                  <Text
-                    as="small"
-                    variant="caption"
-                    tone={
-                      kytka.status === "sick" || kytka.status === "dead"
-                        ? "danger"
-                        : "muted"
-                    }
-                  >
-                    {formatStatus(kytka.status)}
-                  </Text>
-                ) : null}
+                <div className="kytka-list__item-row">
+                  <PlantAvatar
+                    bucket={kytka.primary_photo_bucket}
+                    label={kytka.display_name}
+                    path={kytka.primary_photo_path}
+                    size="sm"
+                  />
+                  <div>
+                    <Text variant="title">{kytka.display_name}</Text>
+                    <Text as="p" variant="body" tone="muted">
+                      {kytka.care_profile_name ?? "bez profilu"}
+                    </Text>
+                    <Text as="small" variant="caption">
+                      {[kytka.location_name, kytka.zone_name, kytka.container_name]
+                        .filter(Boolean)
+                        .join(" / ") || "bez umístění"}
+                    </Text>
+                    {kytka.status !== "ok" ? (
+                      <Text
+                        as="small"
+                        variant="caption"
+                        tone={
+                          kytka.status === "sick" || kytka.status === "dead"
+                            ? "danger"
+                            : "muted"
+                        }
+                      >
+                        {formatStatus(kytka.status)}
+                      </Text>
+                    ) : null}
+                  </div>
+                </div>
               </button>
               <div className="kytka-list__item-footer">
                 <Button
@@ -358,20 +369,8 @@ export function PlantsScreen() {
                   type="button"
                   variant="ghost"
                 >
-                  {wateringId === kytka.id
-                    ? "Ukládám..."
-                    : justWateredId === kytka.id
-                      ? "Zalito!"
-                      : "Zalito"}
+                  {wateringButtonLabel(kytka, wateringId, justWateredId)}
                 </Button>
-                <Text
-                  as="span"
-                  className="kytka-list__item-footer-hint"
-                  tone="muted"
-                  variant="caption"
-                >
-                  {formatLastWatered(kytka.last_watered_at)}
-                </Text>
               </div>
             </article>
           ))}
@@ -387,6 +386,23 @@ export function PlantsScreen() {
       ) : null}
     </section>
   );
+}
+
+function wateringButtonLabel(
+  kytka: KytkaListItem,
+  wateringId: string | null,
+  justWateredId: string | null,
+): string {
+  if (wateringId === kytka.id) {
+    return "Ukládám...";
+  }
+  if (justWateredId === kytka.id) {
+    return "Zalito!";
+  }
+  if (isWateredToday(kytka.last_watered_at)) {
+    return "Zalito dnes";
+  }
+  return "Zalít";
 }
 
 function formatStatus(status: string) {
