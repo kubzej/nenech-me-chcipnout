@@ -12,6 +12,7 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(hasSupabaseConfig);
   const [error, setError] = useState<string | null>(null);
+  const [showIntro, setShowIntro] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -73,6 +74,7 @@ export function App() {
     }
 
     setSession(data.session);
+    setShowIntro(true);
     setPassword("");
     setIsLoading(false);
   }
@@ -88,7 +90,11 @@ export function App() {
   return (
     <AppShell>
       {session ? (
-        <AuthenticatedApp onLogout={handleLogout} />
+        <AuthenticatedApp
+          onLogout={handleLogout}
+          showIntro={showIntro}
+          onIntroDismiss={() => setShowIntro(false)}
+        />
       ) : (
         <WelcomeScreen
           email={email}

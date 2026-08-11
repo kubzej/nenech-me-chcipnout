@@ -11,7 +11,9 @@ import "./authenticated-app.css";
 type AppTab = "today" | "plants" | "places" | "settings";
 
 type AuthenticatedAppProps = {
+  onIntroDismiss: () => void;
   onLogout: () => void;
+  showIntro: boolean;
 };
 
 const navItems: Array<NavItem & { id: AppTab }> = [
@@ -21,7 +23,11 @@ const navItems: Array<NavItem & { id: AppTab }> = [
   { id: "settings", label: "Nastavení", icon: Settings },
 ];
 
-export function AuthenticatedApp({ onLogout }: AuthenticatedAppProps) {
+export function AuthenticatedApp({
+  onIntroDismiss,
+  onLogout,
+  showIntro,
+}: AuthenticatedAppProps) {
   const [activeTab, setActiveTab] = useState<AppTab>("today");
 
   function renderScreen() {
@@ -40,7 +46,7 @@ export function AuthenticatedApp({ onLogout }: AuthenticatedAppProps) {
 
   return (
     <div className="authenticated-app">
-      <SergeantIntroModal />
+      {showIntro ? <SergeantIntroModal onDismiss={onIntroDismiss} /> : null}
       {renderScreen()}
       <BottomNav
         activeItemId={activeTab}

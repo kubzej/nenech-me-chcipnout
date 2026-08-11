@@ -1,18 +1,13 @@
-import { useState } from 'react';
 import sergeantPhoto from '../../assets/brand/plant-drill-sergeant-cutout.png';
 import { Button } from '../../components/ui/Button';
 import { Text } from '../../components/ui/Text';
 import './sergeant-intro-modal.css';
 
-export function SergeantIntroModal() {
-  // Shows on every login by design — no dismissal memory. AuthenticatedApp
-  // remounts this fresh each time `session` goes from null to set.
-  const [isOpen, setIsOpen] = useState(true);
+type SergeantIntroModalProps = {
+  onDismiss: () => void;
+};
 
-  if (!isOpen) {
-    return null;
-  }
-
+export function SergeantIntroModal({ onDismiss }: SergeantIntroModalProps) {
   return (
     <div className="sergeant-intro" role="presentation">
       <div className="sergeant-intro__backdrop" />
@@ -36,7 +31,7 @@ export function SergeantIntroModal() {
         <Text as="p" variant="body" className="sergeant-intro__body">
           No dobře, trochu osobní to je.
         </Text>
-        <Button onClick={() => setIsOpen(false)}>Rozumím, seržante</Button>
+        <Button onClick={onDismiss}>Rozumím, seržante</Button>
       </div>
     </div>
   );
