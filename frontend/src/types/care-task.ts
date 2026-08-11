@@ -12,7 +12,6 @@ export type CareTaskStatus =
   | "done"
   | "skipped"
   | "not_done"
-  | "snoozed"
   | "missed"
   | "no_response"
   | "canceled";
@@ -34,7 +33,6 @@ export type CareTaskItem = {
   explanation: string | null;
   recommended_amount_ml: number | null;
   due_at: string | null;
-  snoozed_until: string | null;
   completed_by: string | null;
   completed_at: string | null;
   outcome_note: string | null;
@@ -46,11 +44,19 @@ export type ActiveAbsenceItem = {
   ends_on: string;
 };
 
+export type LightMismatchItem = {
+  display_name: string | null;
+  zone_name: string | null;
+  light_need: string;
+  light_exposure: string;
+};
+
 export type DailyPlanResponse = {
   tasks: CareTaskItem[];
   profile_less_kytky_count: number;
   everyone_away_today: boolean;
   active_absences: ActiveAbsenceItem[];
+  light_mismatches: LightMismatchItem[];
 };
 
 export type CareTaskCompleteRequest = {

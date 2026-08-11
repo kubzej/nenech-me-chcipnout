@@ -1,20 +1,10 @@
 # Nenech mě chcípnout!
 
-Private plant-care PWA for Jakub and his girlfriend.
+A plant-care PWA for people who cannot be trusted to keep a plant alive on
+their own. Tracks plants, care history, weather, and photos, and tells you
+each day what actually needs doing — instead of relying on memory.
 
-The app helps track real household plants, care history, weather context, photos,
-and daily care tasks so the plants do not rely on heroic memory.
-
-## Project Shape
-
-```text
-frontend/              React + Vite PWA
-backend/               FastAPI business API
-supabase/migrations/   SQL migrations, source of truth for schema
-docs/                  operational project docs
-```
-
-## Local Development
+## Quick start
 
 Frontend:
 
@@ -24,31 +14,17 @@ npm install
 npm run dev
 ```
 
-Backend with Docker:
+Backend (Docker):
 
 ```bash
 cp backend/.env.example backend/.env
 docker compose up backend
 ```
 
-Backend without Docker:
+Full setup and environment variables: [docs/local-development.md](docs/local-development.md).
 
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn app.main:app --reload
-```
+## Docs
 
-Copy `.env.example` values into local env files before connecting to Supabase.
-
-## Architecture Direction
-
-- Supabase Auth stores users and sessions.
-- FastAPI owns business data access and care logic.
-- Supabase Storage stores plant photos.
-- SQL migrations in `supabase/migrations/` are the database source of truth.
-- Netlify hosts the PWA when deployed.
-- Railway hosts the backend when deployed.
-
+- [docs/features.md](docs/features.md) — what the app does, by feature.
+- [docs/architecture.md](docs/architecture.md) — how it's put together.
+- [docs/local-development.md](docs/local-development.md) — local dev setup.

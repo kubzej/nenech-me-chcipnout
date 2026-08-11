@@ -21,8 +21,8 @@ _SELECT = (
     "overwatering_risk,default_water_amount_ml,watering_method,light_need,"
     "heat_sensitive_above_c,cold_sensitive_below_c,frost_sensitive,"
     "feeding_enabled,feeding_interval_days,feeding_months,check_interval_days,"
-    "photo_interval_days,pest_check_interval_days,maintenance_notes,risk_notes,"
-    "created_at,updated_at"
+    "photo_interval_days,pest_check_interval_days,maintenance_interval_days,"
+    "maintenance_notes,risk_notes,created_at,updated_at"
 )
 
 

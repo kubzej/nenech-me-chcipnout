@@ -18,8 +18,8 @@ from app.schemas.care_tasks import (
     CareTaskCompleteResponse,
     CareTaskItem,
     CareTaskSkipRequest,
-    CareTaskSnoozeRequest,
     DailyPlanResponse,
+    LightMismatchItem,
 )
 from app.services.daily_plan import refresh_daily_plan
 from app.services.workspaces import get_first_workspace
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api", tags=["care-tasks"])
 _SELECT = (
     "id,task_date,task_type,target_type,kytka_id,container_id,status,priority,"
     "source,title,instructions,explanation,recommended_amount_ml,due_at,"
-    "snoozed_until,completed_by,completed_at,outcome_note,created_at"
+    "completed_by,completed_at,outcome_note,created_at"
 )
 
 
@@ -48,6 +48,9 @@ async def get_today_plan(
         everyone_away_today=result["everyone_away_today"],
         active_absences=[
             ActiveAbsenceItem(**row) for row in result["active_absences"]
+        ],
+        light_mismatches=[
+            LightMismatchItem(**row) for row in result["light_mismatches"]
         ],
     )
 
@@ -111,27 +114,6 @@ async def skip_care_task(
             "completed_by": str(current_user.user_id),
             "completed_at": _now_iso(),
             "outcome_note": payload.outcome_note,
-        },
-    )
-    return CareTaskItem(**row)
-
-
-@router.post("/care-tasks/{task_id}/snooze", response_model=CareTaskItem)
-async def snooze_care_task(
-    task_id: UUID,
-    payload: CareTaskSnoozeRequest,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> CareTaskItem:
-    workspace = await _require_workspace(current_user)
-    headers = supabase_user_headers(current_user.access_token)
-
-    row = await _patch_task(
-        headers,
-        task_id,
-        workspace["id"],
-        {
-            "status": "snoozed",
-            "snoozed_until": payload.snoozed_until.isoformat(),
         },
     )
     return CareTaskItem(**row)

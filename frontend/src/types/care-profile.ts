@@ -21,6 +21,7 @@ export type CareProfileItem = {
   check_interval_days: number;
   photo_interval_days: number;
   pest_check_interval_days: number | null;
+  maintenance_interval_days: number | null;
   maintenance_notes: string | null;
   risk_notes: string | null;
   created_at: string;
@@ -60,6 +61,7 @@ export type CareProfileCreateRequest = {
   check_interval_days?: number;
   photo_interval_days?: number;
   pest_check_interval_days?: number | null;
+  maintenance_interval_days?: number | null;
   maintenance_notes?: string | null;
   risk_notes?: string | null;
 };

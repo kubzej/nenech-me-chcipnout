@@ -28,6 +28,7 @@ class CareProfileItem(BaseModel):
     check_interval_days: int
     photo_interval_days: int
     pest_check_interval_days: int | None
+    maintenance_interval_days: int | None
     maintenance_notes: str | None
     risk_notes: str | None
     created_at: datetime
@@ -60,6 +61,7 @@ class CareProfileCreateRequest(BaseModel):
     check_interval_days: int = Field(default=7, gt=0)
     photo_interval_days: int = Field(default=7, gt=0)
     pest_check_interval_days: int | None = Field(default=None, gt=0)
+    maintenance_interval_days: int | None = Field(default=None, gt=0)
     maintenance_notes: str | None = None
     risk_notes: str | None = None
 
@@ -72,7 +74,9 @@ class CareProfileCreateRequest(BaseModel):
 
         return stripped
 
-    @field_validator("scientific_name", "watering_method", "maintenance_notes", "risk_notes")
+    @field_validator(
+        "scientific_name", "watering_method", "maintenance_notes", "risk_notes"
+    )
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
         if value is None:

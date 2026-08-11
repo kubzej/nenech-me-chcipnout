@@ -23,7 +23,7 @@ _INSPECTION_EVENT_TYPES = ("checkin", "pest_observation", "treatment")
 _TASK_SELECT = (
     "id,task_date,task_type,target_type,kytka_id,container_id,status,priority,"
     "source,title,instructions,explanation,recommended_amount_ml,due_at,"
-    "snoozed_until,completed_by,completed_at,outcome_note,alerted_at,created_at"
+    "completed_by,completed_at,outcome_note,alerted_at,created_at"
 )
 
 
@@ -50,12 +50,17 @@ async def refresh_daily_plan(
         )
 
         profile_less_count = 0
+        light_mismatches: list[dict[str, Any]] = []
         for kytka in kytky:
             if kytka.get("care_profile_id") is None:
                 profile_less_count += 1
                 continue
             if kytka.get("status") == "dead":
                 continue
+
+            mismatch = _light_mismatch(kytka)
+            if mismatch is not None:
+                light_mismatches.append(mismatch)
 
             await _generate_for_kytka(
                 client,
@@ -107,6 +112,36 @@ async def refresh_daily_plan(
         "profile_less_kytky_count": profile_less_count,
         "everyone_away_today": everyone_away,
         "active_absences": active_absences,
+        "light_mismatches": light_mismatches,
+    }
+
+
+_UNRANKED_LIGHT_VALUES = {None, "unknown", "mixed"}
+
+
+def _light_mismatch(kytka: dict[str, Any]) -> dict[str, Any] | None:
+    """A kytka's care profile wants a different light level than the zone
+    it's actually standing in offers. Not a task — a standing config nudge,
+    recomputed fresh every refresh, same as profile_less_kytky_count."""
+    profile = _nested(kytka.get("care_profiles"))
+    light_need = profile.get("light_need")
+    if light_need in _UNRANKED_LIGHT_VALUES:
+        return None
+
+    container = _nested(kytka.get("containers"))
+    zone = _nested(container.get("zones"))
+    light_exposure = zone.get("light_exposure")
+    if light_exposure in _UNRANKED_LIGHT_VALUES:
+        return None
+
+    if light_need == light_exposure:
+        return None
+
+    return {
+        "display_name": kytka.get("display_name"),
+        "zone_name": zone.get("name"),
+        "light_need": light_need,
+        "light_exposure": light_exposure,
     }
 
 
@@ -137,14 +172,17 @@ async def _fetch_kytky(
         headers=headers,
         params={
             "select": (
-                "id,container_id,care_profile_id,status,"
-                "containers(zone_id,zones(rain_reach,environment,location_id,"
+                "id,display_name,container_id,care_profile_id,status,"
+                "containers(zone_id,zones(name,rain_reach,environment,"
+                "light_exposure,location_id,"
                 "locations(id,latitude,longitude,timezone))),"
                 "care_profiles(water_interval_min_days,water_interval_max_days,"
                 "default_water_amount_ml,watering_method,"
                 "check_interval_days,pest_check_interval_days,photo_interval_days,"
+                "maintenance_interval_days,maintenance_notes,"
                 "feeding_enabled,feeding_interval_days,feeding_months,"
-                "heat_sensitive_above_c,cold_sensitive_below_c,frost_sensitive)"
+                "heat_sensitive_above_c,cold_sensitive_below_c,frost_sensitive,"
+                "light_need)"
             ),
             "workspace_id": f"eq.{workspace_id}",
         },
@@ -192,7 +230,7 @@ async def _fetch_existing_task_statuses(
 ) -> dict[str, str]:
     """generated_key -> status, for tasks already generated today. Used so
     re-running generation never overwrites a task the user already acted
-    on (done/skipped/snoozed) back to pending."""
+    on (done/skipped) back to pending."""
     response = await client.get(
         "/care_tasks",
         headers=headers,
@@ -610,6 +648,38 @@ async def _generate_for_kytka(
                 existing_statuses=existing_statuses,
             )
 
+    # --- Maintenance (pruning, repotting, rotating...) ---
+    maintenance_interval = profile.get("maintenance_interval_days")
+    if maintenance_interval:
+        last_maintenance = last_events.get(f"kytka:{kytka_id}:maintenance")
+        days_since = (
+            (today - last_maintenance.date()).days if last_maintenance else None
+        )
+        if days_since is None or days_since >= maintenance_interval:
+            notes = profile.get("maintenance_notes")
+            explanation = notes if notes else (
+                "Čas na údržbu — mrkni, jestli mě není potřeba "
+                "prořezat, přesadit nebo otočit."
+            )
+            await _upsert_task(
+                client,
+                headers,
+                workspace_id,
+                task_type="maintenance",
+                target_type="kytka",
+                kytka_id=kytka_id,
+                container_id=None,
+                task_date=today,
+                priority="low",
+                title="Údržba",
+                explanation=explanation,
+                recommendation_json={
+                    "maintenance_interval_days": maintenance_interval,
+                    "days_since_last_event": days_since,
+                },
+                existing_statuses=existing_statuses,
+            )
+
     # --- Weather protection (frost or heat) — only Kytky actually exposed
     # to outdoor weather; an indoor Kytka can't be "brought inside". ---
     environment = zone.get("environment")
@@ -810,7 +880,7 @@ async def _upsert_task(
 
     current_status = existing_statuses.get(generated_key)
     if current_status is not None and current_status != "pending":
-        # Already acted on (done/skipped/snoozed/...) this generation run
+        # Already acted on (done/skipped/...) this generation run
         # — never resurrect it back to pending.
         return
 

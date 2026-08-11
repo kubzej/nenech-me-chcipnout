@@ -9,6 +9,7 @@ import {
   Eye,
   Plane,
   Sprout,
+  Sun,
   Wrench,
   X,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import type {
   CareTaskCompleteResponse,
   CareTaskItem,
   DailyPlanResponse,
+  LightMismatchItem,
 } from "../../types/care-task";
 import type { KytkaListItem } from "../../types/kytka";
 import "./screen.css";
@@ -111,6 +113,7 @@ export function TodayScreen() {
   const [profileLessCount, setProfileLessCount] = useState(0);
   const [everyoneAway, setEveryoneAway] = useState(false);
   const [activeAbsences, setActiveAbsences] = useState<ActiveAbsenceItem[]>([]);
+  const [lightMismatches, setLightMismatches] = useState<LightMismatchItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -138,6 +141,7 @@ export function TodayScreen() {
       setProfileLessCount(plan.profile_less_kytky_count);
       setEveryoneAway(plan.everyone_away_today);
       setActiveAbsences(plan.active_absences);
+      setLightMismatches(plan.light_mismatches);
       setKytky(kytkyData);
     } catch (loadError) {
       setError(
@@ -206,6 +210,7 @@ export function TodayScreen() {
       for (const task of group.tasks) {
         await apiPostAuthed(`/api/care-tasks/${task.id}/complete`, {
           event_type: group.taskType,
+          amount_ml: task.recommended_amount_ml,
         });
       }
       await loadToday({ showLoading: false });
@@ -230,6 +235,7 @@ export function TodayScreen() {
         for (const task of group.tasks) {
           await apiPostAuthed(`/api/care-tasks/${task.id}/complete`, {
             event_type: taskType,
+            amount_ml: task.recommended_amount_ml,
           });
         }
       }
@@ -301,6 +307,7 @@ export function TodayScreen() {
     }
   }
 
+
   return (
     <section className="screen screen--stack" aria-label="Dnes">
       <ScreenHeader title="Dnes" subtitle="Co dnes zase zanedbáváš" />
@@ -345,6 +352,15 @@ export function TodayScreen() {
             {profileLessCount === 1
               ? "1 kytka nemá profil — bez něj nevím, jak ji zachránit."
               : `${profileLessCount} kytek nemá profil — bez něj nevím, jak je zachránit.`}
+          </Text>
+        </div>
+      ) : null}
+
+      {lightMismatches.length > 0 ? (
+        <div className="today-banner">
+          <Sun aria-hidden="true" size={20} />
+          <Text as="p" variant="body">
+            {formatLightMismatchList(lightMismatches)}
           </Text>
         </div>
       ) : null}
@@ -498,14 +514,16 @@ function TaskCard({
               ) : null}
             </div>
           </div>
-          <IconButton
-            disabled={isBusy}
-            icon={<X aria-hidden="true" size={16} />}
-            label="Přeskočit"
-            onClick={() => onSkip(taskIds, group.key)}
-            size="sm"
-            variant="ghost"
-          />
+          <div className="kytka-detail__header-actions-group">
+            <IconButton
+              disabled={isBusy}
+              icon={<X aria-hidden="true" size={16} />}
+              label="Přeskočit"
+              onClick={() => onSkip(taskIds, group.key)}
+              size="sm"
+              variant="ghost"
+            />
+          </div>
         </div>
         <div className="today-task__footer">
           <Button disabled={isBusy} onClick={() => onQuickComplete(group)} variant="ghost">
@@ -544,14 +562,16 @@ function TaskCard({
             </Text>
           </div>
         </div>
-        <IconButton
-          disabled={isBusy}
-          icon={<X aria-hidden="true" size={16} />}
-          label="Přeskočit"
-          onClick={() => onSkip([task.id], group.key)}
-          size="sm"
-          variant="ghost"
-        />
+        <div className="kytka-detail__header-actions-group">
+          <IconButton
+            disabled={isBusy}
+            icon={<X aria-hidden="true" size={16} />}
+            label="Přeskočit"
+            onClick={() => onSkip([task.id], group.key)}
+            size="sm"
+            variant="ghost"
+          />
+        </div>
       </div>
       <div className="today-task__footer">
         {group.kind === "detailed" ? (
@@ -574,6 +594,24 @@ function formatAbsenceList(absences: ActiveAbsenceItem[]): string {
     return `${name} (do ${formatShortDate(absence.ends_on)})`;
   });
   return `Pryč: ${parts.join(", ")}.`;
+}
+
+const LIGHT_LABELS: Record<string, string> = {
+  full_sun: "plné slunce",
+  partial_sun: "poloslunce",
+  bright_indirect: "světlé nepřímé",
+  shade: "stín",
+};
+
+function formatLightMismatchList(mismatches: LightMismatchItem[]): string {
+  const parts = mismatches.map((mismatch) => {
+    const name = mismatch.display_name ?? "Kytka";
+    const need = LIGHT_LABELS[mismatch.light_need] ?? mismatch.light_need;
+    const exposure = LIGHT_LABELS[mismatch.light_exposure] ?? mismatch.light_exposure;
+    const zone = mismatch.zone_name ? ` (${mismatch.zone_name})` : "";
+    return `${name} chce ${need}, ale má ${exposure}${zone}`;
+  });
+  return `Možná nejsem na správném místě: ${parts.join("; ")}.`;
 }
 
 function formatShortDate(iso: string): string {

@@ -27,6 +27,7 @@ export const DEFAULT_CARE_PROFILE_VALUES: CareProfileCreateRequest = {
   check_interval_days: 7,
   photo_interval_days: 7,
   pest_check_interval_days: null,
+  maintenance_interval_days: null,
   maintenance_notes: null,
   risk_notes: null,
 };
@@ -318,6 +319,17 @@ export function CareProfileFields({
           })
         }
         value={values.pest_check_interval_days ?? ""}
+      />
+      <TextField
+        disabled={disabled}
+        inputMode="numeric"
+        label="Údržba — prořezat/přesadit/otočit (dní, nepovinné)"
+        onChange={(event) =>
+          onChange({
+            maintenance_interval_days: parseOptionalInt(event.target.value),
+          })
+        }
+        value={values.maintenance_interval_days ?? ""}
       />
     </>
   );

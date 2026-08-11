@@ -21,7 +21,6 @@ CareTaskStatus = Literal[
     "done",
     "skipped",
     "not_done",
-    "snoozed",
     "missed",
     "no_response",
     "canceled",
@@ -45,7 +44,6 @@ class CareTaskItem(BaseModel):
     explanation: str | None
     recommended_amount_ml: int | None
     due_at: datetime | None
-    snoozed_until: datetime | None
     completed_by: UUID | None
     completed_at: datetime | None
     outcome_note: str | None
@@ -69,13 +67,16 @@ class CareTaskSkipRequest(BaseModel):
     outcome_note: str | None = None
 
 
-class CareTaskSnoozeRequest(BaseModel):
-    snoozed_until: datetime
-
-
 class ActiveAbsenceItem(BaseModel):
     display_name: str | None
     ends_on: date
+
+
+class LightMismatchItem(BaseModel):
+    display_name: str | None
+    zone_name: str | None
+    light_need: str
+    light_exposure: str
 
 
 class DailyPlanResponse(BaseModel):
@@ -83,3 +84,4 @@ class DailyPlanResponse(BaseModel):
     profile_less_kytky_count: int
     everyone_away_today: bool
     active_absences: list[ActiveAbsenceItem]
+    light_mismatches: list[LightMismatchItem]
