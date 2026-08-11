@@ -3,6 +3,13 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  # VITE_-prefixed vars are meant to ship in the client bundle (that's the
+  # point of the Vite convention) — Supabase's anon key is a public client
+  # key by design, RLS is the real security boundary. Netlify's generic
+  # secrets scanner doesn't know that, so it false-positives on both.
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
