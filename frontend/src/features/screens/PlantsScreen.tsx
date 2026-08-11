@@ -336,7 +336,14 @@ export function PlantsScreen() {
                     size="sm"
                   />
                   <div>
-                    <Text variant="title">{kytka.display_name}</Text>
+                    <div className="kytka-list__item-title-row">
+                      <Text variant="title">{kytka.display_name}</Text>
+                      <span
+                        className={`status-badge status-badge--${statusBadgeTone(kytka.status)}`}
+                      >
+                        {formatStatus(kytka.status)}
+                      </span>
+                    </div>
                     <Text as="p" variant="body" tone="muted">
                       {kytka.care_profile_name ?? "bez profilu"}
                     </Text>
@@ -345,19 +352,6 @@ export function PlantsScreen() {
                         .filter(Boolean)
                         .join(" / ") || "bez umístění"}
                     </Text>
-                    {kytka.status !== "ok" ? (
-                      <Text
-                        as="small"
-                        variant="caption"
-                        tone={
-                          kytka.status === "sick" || kytka.status === "dead"
-                            ? "danger"
-                            : "muted"
-                        }
-                      >
-                        {formatStatus(kytka.status)}
-                      </Text>
-                    ) : null}
                   </div>
                 </div>
               </button>
@@ -409,7 +403,7 @@ function formatStatus(status: string) {
   const labels: Record<string, string> = {
     dead: "mrtvá",
     dormant: "dormantní",
-    monitoring: "sledování",
+    monitoring: "sledovaná",
     ok: "OK",
     sick: "nemocná",
   };
@@ -417,9 +411,20 @@ function formatStatus(status: string) {
   return labels[status] ?? status;
 }
 
+function statusBadgeTone(status: string): "ok" | "attention" | "danger" {
+  if (status === "sick" || status === "dead") {
+    return "danger";
+  }
+  if (status === "monitoring" || status === "dormant") {
+    return "attention";
+  }
+  return "ok";
+}
+
 const STATUS_OPTIONS = [
   { label: "OK", value: "ok" },
-  { label: "Sledování", value: "monitoring" },
+  { label: "Sledovaná", value: "monitoring" },
   { label: "Nemocná", value: "sick" },
+  { label: "Dormantní", value: "dormant" },
   { label: "Mrtvá", value: "dead" },
 ] as const;

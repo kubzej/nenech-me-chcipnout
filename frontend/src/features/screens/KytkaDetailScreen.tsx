@@ -313,7 +313,16 @@ export function KytkaDetailScreen({
       className="screen screen--stack screen--with-floating-action"
       aria-label={kytka.display_name}
     >
-      <ScreenHeader title={kytka.display_name} />
+      <ScreenHeader
+        title={kytka.display_name}
+        titleBadge={
+          <span
+            className={`status-badge status-badge--${statusBadgeTone(kytka.status)}`}
+          >
+            {formatStatus(kytka.status)}
+          </span>
+        }
+      />
 
       <div className="kytka-detail__header-actions">
         <Button
@@ -785,6 +794,28 @@ const EVENT_TYPE_ICONS: Record<string, LucideIcon> = {
 
 function formatEventType(eventType: string) {
   return EVENT_TYPE_LABELS[eventType] ?? eventType;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  ok: "OK",
+  monitoring: "sledovaná",
+  sick: "nemocná",
+  dormant: "dormantní",
+  dead: "mrtvá",
+};
+
+function formatStatus(status: string) {
+  return STATUS_LABELS[status] ?? status;
+}
+
+function statusBadgeTone(status: string): "ok" | "attention" | "danger" {
+  if (status === "sick" || status === "dead") {
+    return "danger";
+  }
+  if (status === "monitoring" || status === "dormant") {
+    return "attention";
+  }
+  return "ok";
 }
 
 function formatEventDateTime(iso: string) {

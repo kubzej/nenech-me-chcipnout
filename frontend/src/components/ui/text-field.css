@@ -8,6 +8,7 @@
 .text-field textarea {
   min-width: 0;
   width: 100%;
+  max-width: 100%;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 14px 15px;
@@ -16,6 +17,14 @@
   outline: none;
   font-family: inherit;
   font-size: var(--text-md);
+}
+
+/* iOS Safari's native time/date picker can otherwise ignore width: 100%
+   and render past its container's right edge. */
+.text-field input[type="time"],
+.text-field input[type="date"] {
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .text-field textarea {

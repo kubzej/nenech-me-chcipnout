@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 import httpx
@@ -8,6 +9,8 @@ from app.core.supabase_rest import (
     supabase_service_headers,
 )
 from app.services.push import send_push_notification
+
+logger = logging.getLogger(__name__)
 
 _BAD_CONDITIONS = {"wilting", "yellowing", "pests", "damaged"}
 _CONDITION_EVENT_TYPES = {"checkin", "pest_observation"}
@@ -27,16 +30,29 @@ async def maybe_transition_from_condition(
     those stay manual-only, matching the product's "not exclusively
     automatic" status principle.
     """
-    if condition is None or event_type not in _CONDITION_EVENT_TYPES:
+    if event_type not in _CONDITION_EVENT_TYPES:
         return
 
-    if condition in _BAD_CONDITIONS:
+    # Logging a pest observation at all already means "I saw something" —
+    # don't force a second, redundant "Stav rostliny: Škůdci" pick just to
+    # get the same signal. condition="ok" is still the explicit "checked,
+    # they're gone" override that clears it back.
+    effective_condition = condition
+    if event_type == "pest_observation" and condition is None:
+        effective_condition = "pests"
+
+    if effective_condition is None:
+        return
+
+    if effective_condition in _BAD_CONDITIONS:
         kytka = await _patch_status_if_current(
             headers, workspace_id, kytka_id, "ok", "monitoring"
         )
         if kytka:
-            await _notify_sick_plant(workspace_id, kytka["display_name"], actor_user_id)
-    elif condition == "ok":
+            await _notify_sick_plant_safe(
+                workspace_id, kytka["display_name"], actor_user_id
+            )
+    elif effective_condition == "ok":
         await _patch_status_if_current(
             headers, workspace_id, kytka_id, "monitoring", "ok"
         )
@@ -50,7 +66,7 @@ async def escalate_to_monitoring(
         headers, workspace_id, kytka_id, "ok", "monitoring"
     )
     if kytka:
-        await _notify_sick_plant(
+        await _notify_sick_plant_safe(
             workspace_id, kytka["display_name"], actor_user_id=None
         )
 
@@ -82,6 +98,19 @@ async def _patch_status_if_current(
 
     rows = response.json()
     return rows[0] if rows else None
+
+
+async def _notify_sick_plant_safe(
+    workspace_id: object, kytka_display_name: str, actor_user_id: object | None
+) -> None:
+    """The status transition itself already succeeded by the time this
+    runs — a push notification is a best-effort side effect, so a failure
+    here (e.g. missing SUPABASE_SERVICE_ROLE_KEY, a webpush error) must
+    never fail the care-event request the user is waiting on."""
+    try:
+        await _notify_sick_plant(workspace_id, kytka_display_name, actor_user_id)
+    except Exception:
+        logger.exception("Failed to send sick-plant notification")
 
 
 async def _notify_sick_plant(

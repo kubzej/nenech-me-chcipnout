@@ -117,7 +117,13 @@ export function usePushNotifications() {
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
         await apiPostAuthed("/api/push/unsubscribe", { endpoint: subscription.endpoint });
-        await subscription.unsubscribe();
+        try {
+          await subscription.unsubscribe();
+        } catch {
+          // The backend is the source of truth and is already updated —
+          // a flaky browser-side unsubscribe (common on iOS) shouldn't
+          // leave the UI stuck showing "enabled".
+        }
       }
       setIsSubscribed(false);
       await updateSettings({ master_enabled: false });

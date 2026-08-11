@@ -174,7 +174,7 @@ async def _fetch_kytky(
         headers=headers,
         params={
             "select": (
-                "id,display_name,container_id,care_profile_id,status,"
+                "id,display_name,container_id,care_profile_id,status,created_at,"
                 "containers(zone_id,zones(name,rain_reach,environment,"
                 "light_exposure,location_id,"
                 "locations(id,latitude,longitude,timezone))),"
@@ -426,6 +426,7 @@ async def _generate_for_kytka(
 ) -> None:
     kytka_id = str(kytka["id"])
     container_id = str(kytka["container_id"])
+    kytka_created_on = datetime.fromisoformat(str(kytka["created_at"])).date()
     profile = _nested(kytka.get("care_profiles"))
     container = _nested(kytka.get("containers"))
     zone = _nested(container.get("zones"))
@@ -457,22 +458,22 @@ async def _generate_for_kytka(
         watering_days_since = (
             (today - last_watered.date()).days if last_watered else None
         )
+        gating_days_since = (
+            watering_days_since
+            if watering_days_since is not None
+            else (today - kytka_created_on).days
+        )
 
         threshold = effective_min if effective_min is not None else effective_max
         rain_delay_days = _rain_delay_days(zone.get("rain_reach"), today_forecast)
 
-        due = watering_days_since is None or (
-            threshold is not None and watering_days_since >= threshold + rain_delay_days
+        due = (
+            threshold is not None and gating_days_since >= threshold + rain_delay_days
         )
 
         pulled_forward = False
-        if (
-            not due
-            and departure is not None
-            and threshold is not None
-            and watering_days_since is not None
-        ):
-            days_until_due = threshold - watering_days_since
+        if not due and departure is not None and threshold is not None:
+            days_until_due = threshold - gating_days_since
             days_until_departure_ends = (
                 date.fromisoformat(departure["ends_on"]) - today
             ).days
@@ -532,7 +533,12 @@ async def _generate_for_kytka(
         if interval:
             last_fed = last_events.get(f"container:{container_id}:fertilizing")
             days_since = (today - last_fed.date()).days if last_fed else None
-            if days_since is None or days_since >= interval:
+            gating_days_since = (
+                days_since
+                if days_since is not None
+                else (today - kytka_created_on).days
+            )
+            if gating_days_since >= interval:
                 if days_since is not None:
                     fertilizing_explanation = (
                         f"Poslední hnojení před {days_since} dny. "
@@ -572,7 +578,10 @@ async def _generate_for_kytka(
             last_events, [f"kytka:{kytka_id}:{t}" for t in _INSPECTION_EVENT_TYPES]
         )
         days_since = (today - last_inspection.date()).days if last_inspection else None
-        if days_since is None or days_since >= effective_check:
+        gating_days_since = (
+            days_since if days_since is not None else (today - kytka_created_on).days
+        )
+        if gating_days_since >= effective_check:
             await _upsert_task(
                 client,
                 headers,
@@ -630,7 +639,10 @@ async def _generate_for_kytka(
     if photo_interval:
         last_photo = last_events.get(f"kytka:{kytka_id}:photo_observation")
         days_since = (today - last_photo.date()).days if last_photo else None
-        if days_since is None or days_since >= photo_interval:
+        gating_days_since = (
+            days_since if days_since is not None else (today - kytka_created_on).days
+        )
+        if gating_days_since >= photo_interval:
             await _upsert_task(
                 client,
                 headers,
@@ -657,7 +669,10 @@ async def _generate_for_kytka(
         days_since = (
             (today - last_maintenance.date()).days if last_maintenance else None
         )
-        if days_since is None or days_since >= maintenance_interval:
+        gating_days_since = (
+            days_since if days_since is not None else (today - kytka_created_on).days
+        )
+        if gating_days_since >= maintenance_interval:
             notes = profile.get("maintenance_notes")
             explanation = notes if notes else (
                 "Čas na údržbu — mrkni, jestli mě není potřeba "
