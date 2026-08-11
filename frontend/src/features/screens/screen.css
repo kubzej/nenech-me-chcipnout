@@ -110,9 +110,10 @@
 .kytka-list__item-footer .button {
   flex: 0 0 auto;
   width: auto;
-  min-height: 38px;
+  min-width: 160px;
+  min-height: 42px;
   border-radius: 999px;
-  padding: 0 14px;
+  padding: 0 32px;
   color: var(--color-leaf-dark);
   background: rgba(236, 247, 221, 0.72);
   font-size: var(--text-sm);
@@ -405,9 +406,10 @@
 .today-task__footer .button {
   flex: 0 0 auto;
   width: auto;
-  min-height: 38px;
+  min-width: 160px;
+  min-height: 42px;
   border-radius: 999px;
-  padding: 0 14px;
+  padding: 0 32px;
   color: var(--color-leaf-dark);
   background: rgba(236, 247, 221, 0.72);
   font-size: var(--text-sm);
