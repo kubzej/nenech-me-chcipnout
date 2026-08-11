@@ -22,12 +22,14 @@ export function EmptyState({
   return (
     <div className={classes}>
       {icon ? <div className="empty-state__icon">{icon}</div> : null}
-      <Text variant="title">{title}</Text>
-      {description ? (
-        <Text variant="body" tone="muted">
-          {description}
-        </Text>
-      ) : null}
+      <div className="empty-state__body">
+        <Text variant="title">{title}</Text>
+        {description ? (
+          <Text variant="body" tone="muted">
+            {description}
+          </Text>
+        ) : null}
+      </div>
       {action ? <div className="empty-state__action">{action}</div> : null}
     </div>
   );

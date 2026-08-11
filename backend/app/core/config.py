@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     app_cors_origins: str = "http://localhost:5173"
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
+    supabase_service_role_key: str | None = None
+    vapid_public_key: str | None = None
+    vapid_private_key: str | None = None
+    vapid_claim_email: str | None = None
 
     @cached_property
     def cors_origins(self) -> list[str]:

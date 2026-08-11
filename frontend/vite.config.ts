@@ -7,7 +7,17 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw-push.ts",
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024
+      },
       includeAssets: ["brand/app-icon.png"],
+      devOptions: {
+        enabled: false
+      },
       manifest: {
         name: "Nenech mě chcípnout!",
         short_name: "Kytky",
