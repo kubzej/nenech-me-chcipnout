@@ -89,7 +89,7 @@ export function NotificationsSection({ onBack }: NotificationsSectionProps) {
           </Button>
         }
         title="Notifikace"
-        subtitle="Ať mi appka připomene, než zvadnu"
+        subtitle="Připomeň mi, než zvadnu"
       />
 
       {error ? (

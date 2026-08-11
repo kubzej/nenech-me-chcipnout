@@ -12,7 +12,7 @@
   gap: var(--space-6);
   max-width: var(--layout-max-sm);
   margin: 0 auto;
-  padding: var(--space-6) 0;
+  padding: calc(var(--space-6) + env(safe-area-inset-top)) 0 var(--space-6);
 }
 
 .screen--with-floating-action {

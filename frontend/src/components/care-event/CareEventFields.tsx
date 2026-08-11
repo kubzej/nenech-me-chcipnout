@@ -106,7 +106,6 @@ export function CareEventFields({
           </Text>
           <input
             accept="image/*"
-            capture="environment"
             disabled={disabled}
             onChange={(event) => onPhotoChange(event.target.files?.[0] ?? null)}
             type="file"

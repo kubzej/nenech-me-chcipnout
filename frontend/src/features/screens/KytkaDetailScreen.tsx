@@ -341,7 +341,6 @@ export function KytkaDetailScreen({
 
       <input
         accept="image/*"
-        capture="environment"
         className="visually-hidden"
         onChange={handleFotoSelected}
         ref={fotoInputRef}

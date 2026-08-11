@@ -338,7 +338,6 @@ export function TodayScreen() {
 
       <input
         accept="image/*"
-        capture="environment"
         className="visually-hidden"
         onChange={handlePhotoSelected}
         ref={photoInputRef}

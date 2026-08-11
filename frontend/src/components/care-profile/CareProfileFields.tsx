@@ -70,12 +70,21 @@ export function CareProfileFields({
       return;
     }
 
-    onChange(patch);
+    const { patch: safePatch, warning } = stripOversizedFields(patch);
+    onChange(safePatch);
+    setIsFilled(true);
+    setTimeout(() => setIsFilled(false), 2000);
+
+    if (warning) {
+      // Keep the paste box open with the pasted text so the warning has
+      // context — closing it would hide which field still needs fixing.
+      setPasteError(warning);
+      return;
+    }
+
     setPasteError(null);
     setJsonPaste("");
     setIsPasteOpen(false);
-    setIsFilled(true);
-    setTimeout(() => setIsFilled(false), 2000);
   }
 
   return (
@@ -421,6 +430,42 @@ function parseAiJson(raw: string): {
   }
 
   return { patch, error: null };
+}
+
+const AI_FIELD_MAX_LENGTHS: Partial<Record<keyof CareProfileCreateRequest, number>> = {
+  watering_method: 240,
+  scientific_name: 160,
+};
+
+const AI_FIELD_LABELS: Partial<Record<keyof CareProfileCreateRequest, string>> = {
+  watering_method: "způsob zalévání",
+  scientific_name: "vědecký název",
+};
+
+function stripOversizedFields(patch: Partial<CareProfileCreateRequest>): {
+  patch: Partial<CareProfileCreateRequest>;
+  warning: string | null;
+} {
+  const next = { ...patch };
+  const skipped: string[] = [];
+
+  for (const key of Object.keys(AI_FIELD_MAX_LENGTHS) as Array<
+    keyof CareProfileCreateRequest
+  >) {
+    const max = AI_FIELD_MAX_LENGTHS[key];
+    const value = next[key];
+    if (max !== undefined && typeof value === "string" && value.length > max) {
+      delete next[key];
+      skipped.push(`${AI_FIELD_LABELS[key]} (${value.length} znaků, max ${max})`);
+    }
+  }
+
+  const warning =
+    skipped.length > 0
+      ? `Tohle bylo v AI odpovědi moc dlouhé, doplň to ručně: ${skipped.join(", ")}.`
+      : null;
+
+  return { patch: next, warning };
 }
 
 function asNullableString(value: unknown): string | null | undefined {
