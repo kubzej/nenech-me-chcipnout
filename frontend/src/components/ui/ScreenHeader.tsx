@@ -1,0 +1,23 @@
+import type { ReactNode } from "react";
+import { Text } from "./Text";
+import "./screen-header.css";
+
+type ScreenHeaderProps = {
+  action?: ReactNode;
+  title: string;
+  subtitle?: string;
+};
+
+export function ScreenHeader({ action, subtitle, title }: ScreenHeaderProps) {
+  return (
+    <header className="screen-header">
+      <div>
+        <Text as="h1" variant="kicker">
+          {title}
+        </Text>
+        {subtitle ? <Text variant="heading">{subtitle}</Text> : null}
+      </div>
+      {action ? <div className="screen-header__action">{action}</div> : null}
+    </header>
+  );
+}

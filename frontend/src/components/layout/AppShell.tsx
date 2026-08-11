@@ -1,0 +1,11 @@
+import type { ReactNode } from "react";
+import "./app-shell.css";
+
+type AppShellProps = {
+  children: ReactNode;
+};
+
+export function AppShell({ children }: AppShellProps) {
+  return <main className="app-shell">{children}</main>;
+}
+

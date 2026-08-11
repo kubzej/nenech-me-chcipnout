@@ -1,0 +1,10 @@
+.auth-panel {
+  display: grid;
+  gap: var(--space-3);
+  max-width: var(--layout-max-sm);
+}
+
+.auth-panel__surface {
+  padding: var(--space-5);
+}
+

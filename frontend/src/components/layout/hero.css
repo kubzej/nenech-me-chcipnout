@@ -1,0 +1,9 @@
+.hero {
+  display: grid;
+  max-width: var(--layout-max-sm);
+}
+
+.hero .text--display {
+  max-width: 11ch;
+}
+

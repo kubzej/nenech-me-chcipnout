@@ -1,0 +1,25 @@
+.welcome-screen {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  max-width: var(--layout-max-sm);
+  margin: 0 auto;
+}
+
+.welcome-screen__content {
+  display: grid;
+  width: 100%;
+  align-content: start;
+  gap: var(--space-5);
+  padding: clamp(24px, 7vh, 64px) 0 var(--space-6);
+}
+
+.welcome-screen__copy {
+  max-width: var(--layout-max-sm);
+}
+
+@media (max-width: 860px) {
+  .welcome-screen {
+    min-height: auto;
+  }
+}

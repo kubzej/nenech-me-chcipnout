@@ -1,0 +1,36 @@
+.text-field {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.text-field input,
+.text-field textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 15px;
+  color: var(--color-ink);
+  background: rgba(255, 255, 255, 0.82);
+  outline: none;
+  font-family: inherit;
+  font-size: var(--text-md);
+}
+
+.text-field textarea {
+  resize: vertical;
+}
+
+.text-field input:focus,
+.text-field textarea:focus {
+  box-shadow: 0 0 0 4px var(--color-focus);
+}
+
+.text-field input:-webkit-autofill,
+.text-field input:-webkit-autofill:hover,
+.text-field input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-ink);
+  -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.82) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}

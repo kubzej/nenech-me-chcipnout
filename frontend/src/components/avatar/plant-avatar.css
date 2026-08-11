@@ -1,0 +1,42 @@
+.plant-avatar {
+  display: block;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background: rgba(236, 247, 221, 0.72);
+}
+
+.plant-avatar--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-leaf-dark);
+}
+
+.plant-avatar--sm {
+  width: 40px;
+  height: 40px;
+}
+
+.plant-avatar--md {
+  width: 64px;
+  height: 64px;
+}
+
+.plant-avatar--lg {
+  width: 128px;
+  height: 128px;
+}
+
+.plant-avatar--full {
+  width: 100%;
+  height: auto;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+}
+
+.plant-avatar--full.plant-avatar--placeholder {
+  aspect-ratio: 1;
+  height: auto;
+}

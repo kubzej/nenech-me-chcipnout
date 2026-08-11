@@ -1,32 +1,54 @@
-# React + TypeScript + Vite
+# Nenech mě chcípnout!
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Private plant-care PWA for Jakub and his girlfriend.
 
-Currently, two official plugins are available:
+The app helps track real household plants, care history, weather context, photos,
+and daily care tasks so the plants do not rely on heroic memory.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Project Shape
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```text
+frontend/              React + Vite PWA
+backend/               FastAPI business API
+supabase/migrations/   SQL migrations, source of truth for schema
+docs/                  operational project docs
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Local Development
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Backend with Docker:
+
+```bash
+cp backend/.env.example backend/.env
+docker compose up backend
+```
+
+Backend without Docker:
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+uvicorn app.main:app --reload
+```
+
+Copy `.env.example` values into local env files before connecting to Supabase.
+
+## Architecture Direction
+
+- Supabase Auth stores users and sessions.
+- FastAPI owns business data access and care logic.
+- Supabase Storage stores plant photos.
+- SQL migrations in `supabase/migrations/` are the database source of truth.
+- Netlify hosts the PWA when deployed.
+- Railway hosts the backend when deployed.
+

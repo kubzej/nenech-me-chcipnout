@@ -1,0 +1,30 @@
+.empty-state {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  color: var(--color-ink-soft);
+  background: rgba(255, 255, 255, 0.64);
+  box-shadow: var(--shadow-soft);
+}
+
+.empty-state--inline {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+}
+
+.empty-state__icon {
+  display: inline-grid;
+  color: var(--color-leaf-dark);
+}
+
+.empty-state .text--title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.empty-state__action {
+  margin-top: var(--space-1);
+}

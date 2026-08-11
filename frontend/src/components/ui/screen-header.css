@@ -1,0 +1,35 @@
+.screen-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.screen-header > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.screen-header h1 {
+  max-width: 100%;
+}
+
+.screen-header__action {
+  flex: 0 0 auto;
+  padding-top: 2px;
+}
+
+.screen-header__action .button {
+  width: auto;
+}
+
+@media (max-width: 560px) {
+  .screen-header {
+    display: grid;
+  }
+
+  .screen-header__action {
+    justify-self: start;
+  }
+}

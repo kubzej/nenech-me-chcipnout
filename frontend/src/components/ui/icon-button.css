@@ -1,0 +1,31 @@
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+}
+
+.icon-button--md {
+  width: 44px;
+  height: 44px;
+}
+
+.icon-button--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.icon-button--ghost {
+  background: transparent;
+}
+
+.icon-button--surface {
+  background: var(--color-surface-2);
+}
+
+.icon-button:focus-visible {
+  outline: 4px solid var(--color-focus);
+  outline-offset: 2px;
+}

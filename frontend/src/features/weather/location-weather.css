@@ -1,0 +1,31 @@
+.location-weather {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: fit-content;
+  margin-top: var(--space-1);
+}
+
+.location-weather svg {
+  flex: 0 0 auto;
+  color: var(--color-leaf-dark);
+}
+
+.location-weather .text {
+  white-space: nowrap;
+}
+
+.location-weather--skeleton {
+  width: 150px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.54),
+    rgba(255, 255, 255, 0.9),
+    rgba(255, 255, 255, 0.54)
+  );
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
