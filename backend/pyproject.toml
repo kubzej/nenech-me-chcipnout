@@ -9,6 +9,7 @@ dependencies = [
   "pillow>=10.4.0",
   "pydantic-settings>=2.6.0",
   "PyJWT[crypto]>=2.9.0",
+  "pywebpush>=2.0.0",
   "uvicorn[standard]>=0.30.6"
 ]
 

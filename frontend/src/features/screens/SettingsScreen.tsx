@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronRight, LogOut, Plane, Sprout } from "lucide-react";
+import { Bell, ChevronRight, LogOut, Plane, Sprout } from "lucide-react";
 import { AbsencesSection } from "../settings/AbsencesSection";
 import { CareProfilesSection } from "../settings/CareProfilesSection";
+import { NotificationsSection } from "../settings/NotificationsSection";
 import { Button } from "../../components/ui/Button";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
 import { Text } from "../../components/ui/Text";
@@ -11,7 +12,7 @@ type SettingsScreenProps = {
   onLogout: () => void;
 };
 
-type SettingsSection = "home" | "care-profiles" | "absences";
+type SettingsSection = "home" | "care-profiles" | "absences" | "notifications";
 
 export function SettingsScreen({ onLogout }: SettingsScreenProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("home");
@@ -22,6 +23,10 @@ export function SettingsScreen({ onLogout }: SettingsScreenProps) {
 
   if (activeSection === "absences") {
     return <AbsencesSection onBack={() => setActiveSection("home")} />;
+  }
+
+  if (activeSection === "notifications") {
+    return <NotificationsSection onBack={() => setActiveSection("home")} />;
   }
 
   return (
@@ -48,6 +53,17 @@ export function SettingsScreen({ onLogout }: SettingsScreenProps) {
           <Plane aria-hidden="true" size={18} />
           <Text as="span" variant="body">
             Absence
+          </Text>
+          <ChevronRight aria-hidden="true" size={18} />
+        </button>
+        <button
+          className="settings-menu__item"
+          onClick={() => setActiveSection("notifications")}
+          type="button"
+        >
+          <Bell aria-hidden="true" size={18} />
+          <Text as="span" variant="body">
+            Notifikace
           </Text>
           <ChevronRight aria-hidden="true" size={18} />
         </button>

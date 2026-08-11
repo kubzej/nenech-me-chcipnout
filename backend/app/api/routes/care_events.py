@@ -56,6 +56,7 @@ async def create_care_event(
         payload.kytka_id,
         payload.event_type,
         payload.condition,
+        actor_user_id=current_user.user_id,
     )
 
     return CareEventItem(**row)
@@ -137,6 +138,7 @@ async def update_care_event(
         payload.kytka_id,
         payload.event_type,
         payload.condition,
+        actor_user_id=current_user.user_id,
     )
 
     return CareEventItem(**rows[0])

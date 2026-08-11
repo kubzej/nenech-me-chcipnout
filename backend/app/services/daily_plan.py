@@ -23,7 +23,7 @@ _INSPECTION_EVENT_TYPES = ("checkin", "pest_observation", "treatment")
 _TASK_SELECT = (
     "id,task_date,task_type,target_type,kytka_id,container_id,status,priority,"
     "source,title,instructions,explanation,recommended_amount_ml,due_at,"
-    "snoozed_until,completed_by,completed_at,outcome_note,created_at"
+    "snoozed_until,completed_by,completed_at,outcome_note,alerted_at,created_at"
 )
 
 

@@ -27,6 +27,23 @@ def supabase_user_headers(access_token: str) -> dict[str, str]:
     }
 
 
+def supabase_service_headers() -> dict[str, str]:
+    """Trusted server-only headers that bypass RLS entirely. Only ever use
+    this from offline cron jobs (app/jobs/*), never from a route that serves
+    a frontend request — those must keep using supabase_user_headers so RLS
+    stays the actual security boundary."""
+    if not settings.supabase_service_role_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="SUPABASE_SERVICE_ROLE_KEY is not configured",
+        )
+
+    return {
+        "apikey": settings.supabase_service_role_key,
+        "Authorization": f"Bearer {settings.supabase_service_role_key}",
+    }
+
+
 def raise_supabase_error(response: httpx.Response) -> None:
     if response.status_code < 400:
         return

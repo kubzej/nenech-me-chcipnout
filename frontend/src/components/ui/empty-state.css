@@ -20,6 +20,12 @@
   color: var(--color-leaf-dark);
 }
 
+.empty-state__body {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
 .empty-state .text--title {
   font-size: var(--text-md);
   font-weight: 600;
