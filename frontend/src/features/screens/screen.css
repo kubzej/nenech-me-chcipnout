@@ -389,6 +389,11 @@
   color: var(--color-leaf-dark);
 }
 
+.today-banner__text {
+  flex: 1;
+  min-width: 0;
+}
+
 .today-task__header {
   display: flex;
   align-items: flex-start;

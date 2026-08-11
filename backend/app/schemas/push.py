@@ -31,7 +31,6 @@ class NotificationPreferencesItem(BaseModel):
     daily_plan_enabled: bool
     critical_weather_enabled: bool
     sick_plant_enabled: bool
-    weekly_photo_enabled: bool
     morning_time: time
     timezone: str
     created_at: datetime
@@ -43,7 +42,6 @@ class NotificationPreferencesUpdate(BaseModel):
     daily_plan_enabled: bool | None = None
     critical_weather_enabled: bool | None = None
     sick_plant_enabled: bool | None = None
-    weekly_photo_enabled: bool | None = None
     morning_time: time | None = None
 
 

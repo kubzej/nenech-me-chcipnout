@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -79,10 +80,25 @@ async def places_overview(
         )
         raise_supabase_error(containers_response)
 
+        kytky_response = await client.get(
+            "/kytky",
+            headers=headers,
+            params={
+                "select": "container_id",
+                "workspace_id": f"eq.{workspace['id']}",
+            },
+        )
+        raise_supabase_error(kytky_response)
+
+    kytky_counts = Counter(
+        str(row["container_id"]) for row in kytky_response.json()
+    )
+
     return _to_places_overview(
         locations_response.json(),
         zones_response.json(),
         containers_response.json(),
+        kytky_counts,
     )
 
 
@@ -187,6 +203,9 @@ async def delete_location(
             raise_supabase_error(containers_response)
             container_ids = [str(row["id"]) for row in containers_response.json()]
 
+        await _delete_kytky_in_containers(
+            client, headers, container_ids, workspace["id"]
+        )
         await _archive_rows(
             client, "/containers", headers, container_ids, workspace["id"]
         )
@@ -304,6 +323,9 @@ async def delete_zone(
         raise_supabase_error(containers_response)
         container_ids = [str(row["id"]) for row in containers_response.json()]
 
+        await _delete_kytky_in_containers(
+            client, headers, container_ids, workspace["id"]
+        )
         await _archive_rows(
             client, "/containers", headers, container_ids, workspace["id"]
         )
@@ -430,6 +452,9 @@ async def delete_container(
     headers = _insert_headers(current_user)
 
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
+        await _delete_kytky_in_containers(
+            client, headers, [str(container_id)], workspace["id"]
+        )
         await _archive_rows(
             client, "/containers", headers, [str(container_id)], workspace["id"]
         )
@@ -510,10 +535,36 @@ async def _archive_rows(
     raise_supabase_error(response)
 
 
+async def _delete_kytky_in_containers(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    container_ids: list[str],
+    workspace_id: object,
+) -> None:
+    """Containers are archived, not hard-deleted — but a kytka can't
+    usefully survive its container disappearing from Places, so deleting a
+    container (directly, or via its zone/location) takes its kytky with it.
+    care_tasks/care_events/plant_photos cascade off kytky automatically
+    (20260807150000_kytky_hard_delete.sql)."""
+    if not container_ids:
+        return
+
+    response = await client.delete(
+        "/kytky",
+        headers=headers,
+        params={
+            "container_id": f"in.({','.join(container_ids)})",
+            "workspace_id": f"eq.{workspace_id}",
+        },
+    )
+    raise_supabase_error(response)
+
+
 def _to_places_overview(
     location_rows: list[dict[str, object]],
     zone_rows: list[dict[str, object]],
     container_rows: list[dict[str, object]],
+    kytky_counts: dict[str, int],
 ) -> list[PlaceLocationOverview]:
     containers_by_zone: dict[str, list[PlaceContainerOverview]] = {}
     for row in container_rows:
@@ -529,6 +580,7 @@ def _to_places_overview(
                 notes=_optional_str(row.get("notes")),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
+                kytky_count=kytky_counts.get(str(row["id"]), 0),
             ),
         )
 

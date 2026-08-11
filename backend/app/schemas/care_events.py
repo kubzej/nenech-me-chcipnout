@@ -31,6 +31,7 @@ class CareEventItem(BaseModel):
     method: str | None
     condition: str | None
     note: str | None
+    recorded_by: UUID
     created_at: datetime
 
 

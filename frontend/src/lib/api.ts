@@ -3,11 +3,40 @@ import { supabase } from "./supabase";
 
 async function parseApiError(response: Response): Promise<Error> {
   try {
-    const body = (await response.json()) as { detail?: string };
-    return new Error(body.detail ?? `API request failed: ${response.status}`);
+    const body = (await response.json()) as { detail?: unknown };
+    return new Error(
+      formatErrorDetail(body.detail) ?? `API request failed: ${response.status}`,
+    );
   } catch {
     return new Error(`API request failed: ${response.status}`);
   }
+}
+
+function formatErrorDetail(detail: unknown): string | undefined {
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (!item || typeof item !== "object" || !("msg" in item)) {
+          return null;
+        }
+        const loc = Array.isArray((item as { loc?: unknown }).loc)
+          ? (item as { loc: unknown[] }).loc
+              .filter((part) => part !== "body")
+              .join(".")
+          : null;
+        const msg = String((item as { msg: unknown }).msg);
+        return loc ? `${loc}: ${msg}` : msg;
+      })
+      .filter((message): message is string => Boolean(message));
+
+    return messages.length > 0 ? messages.join("; ") : undefined;
+  }
+
+  return undefined;
 }
 
 export async function apiGet<T>(path: string, accessToken?: string): Promise<T> {

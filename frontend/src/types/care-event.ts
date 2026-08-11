@@ -28,6 +28,7 @@ export type CareEventItem = {
   method: string | null;
   condition: string | null;
   note: string | null;
+  recorded_by: string;
   created_at: string;
 };
 

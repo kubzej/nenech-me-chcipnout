@@ -59,6 +59,7 @@ class PlaceContainerOverview(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+    kytky_count: int
 
 
 class PlaceZoneOverview(BaseModel):

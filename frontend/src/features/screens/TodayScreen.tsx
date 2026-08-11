@@ -34,6 +34,7 @@ import type {
   CareTaskItem,
   DailyPlanResponse,
   LightMismatchItem,
+  ProfileLessKytkaItem,
 } from "../../types/care-task";
 import type { KytkaListItem } from "../../types/kytka";
 import "./screen.css";
@@ -110,7 +111,10 @@ const PRIORITY_RANK: Record<string, number> = {
 export function TodayScreen() {
   const [tasks, setTasks] = useState<CareTaskItem[]>([]);
   const [kytky, setKytky] = useState<KytkaListItem[]>([]);
-  const [profileLessCount, setProfileLessCount] = useState(0);
+  const [profileLessKytky, setProfileLessKytky] = useState<ProfileLessKytkaItem[]>([]);
+  const [dismissedProfileLessIds, setDismissedProfileLessIds] = useState<Set<string>>(
+    () => new Set(readDismissedProfileLessIds()),
+  );
   const [everyoneAway, setEveryoneAway] = useState(false);
   const [activeAbsences, setActiveAbsences] = useState<ActiveAbsenceItem[]>([]);
   const [lightMismatches, setLightMismatches] = useState<LightMismatchItem[]>([]);
@@ -138,7 +142,7 @@ export function TodayScreen() {
         apiGetAuthed<KytkaListItem[]>("/api/kytky"),
       ]);
       setTasks(plan.tasks);
-      setProfileLessCount(plan.profile_less_kytky_count);
+      setProfileLessKytky(plan.profile_less_kytky);
       setEveryoneAway(plan.everyone_away_today);
       setActiveAbsences(plan.active_absences);
       setLightMismatches(plan.light_mismatches);
@@ -165,6 +169,20 @@ export function TodayScreen() {
     );
   const wateringGroups = quickGroupsByType("watering");
   const fertilizingGroups = quickGroupsByType("fertilizing");
+  const visibleProfileLess = profileLessKytky.filter(
+    (kytka) => !dismissedProfileLessIds.has(kytka.id),
+  );
+
+  function handleDismissProfileLess() {
+    setDismissedProfileLessIds((current) => {
+      const next = new Set(current);
+      for (const kytka of profileLessKytky) {
+        next.add(kytka.id);
+      }
+      writeDismissedProfileLessIds(next);
+      return next;
+    });
+  }
 
   function openDetailedSheet(task: CareTaskItem) {
     setActiveTask(task);
@@ -345,14 +363,19 @@ export function TodayScreen() {
         </div>
       ) : null}
 
-      {profileLessCount > 0 ? (
+      {visibleProfileLess.length > 0 ? (
         <div className="today-banner">
           <Sprout aria-hidden="true" size={20} />
-          <Text as="p" variant="body">
-            {profileLessCount === 1
-              ? "1 kytka nemá profil — bez něj nevím, jak ji zachránit."
-              : `${profileLessCount} kytek nemá profil — bez něj nevím, jak je zachránit.`}
+          <Text as="p" variant="body" className="today-banner__text">
+            {formatProfileLessList(visibleProfileLess)}
           </Text>
+          <IconButton
+            icon={<X aria-hidden="true" size={16} />}
+            label="Skrýt"
+            onClick={handleDismissProfileLess}
+            size="sm"
+            variant="ghost"
+          />
         </div>
       ) : null}
 
@@ -612,6 +635,35 @@ function formatLightMismatchList(mismatches: LightMismatchItem[]): string {
     return `${name} chce ${need}, ale má ${exposure}${zone}`;
   });
   return `Možná nejsem na správném místě: ${parts.join("; ")}.`;
+}
+
+function formatProfileLessList(kytky: ProfileLessKytkaItem[]): string {
+  const names = kytky.map((kytka) => kytka.display_name ?? "Kytka").join(", ");
+  return kytky.length === 1
+    ? `${names} nemá profil — bez něj nevím, jak ji zachránit.`
+    : `${names} nemají profil — bez něj nevím, jak je zachránit.`;
+}
+
+const PROFILE_LESS_DISMISS_KEY = "nmch:dismissed-profile-less-kytky";
+
+function readDismissedProfileLessIds(): string[] {
+  try {
+    const raw = window.localStorage.getItem(PROFILE_LESS_DISMISS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissedProfileLessIds(ids: Set<string>): void {
+  try {
+    window.localStorage.setItem(
+      PROFILE_LESS_DISMISS_KEY,
+      JSON.stringify([...ids]),
+    );
+  } catch {
+    // localStorage can fail (private mode, quota) — dismiss just won't persist
+  }
 }
 
 function formatShortDate(iso: string): string {

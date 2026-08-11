@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api", tags=["care-events"])
 
 _SELECT = (
     "id,event_type,target_type,kytka_id,container_id,occurred_at,"
-    "amount_ml,method,condition,note,created_at"
+    "amount_ml,method,condition,note,recorded_by,created_at"
 )
 
 _CONTAINER_SCOPED_TYPES: set[CareEventType] = {"watering", "fertilizing"}

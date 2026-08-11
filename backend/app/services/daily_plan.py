@@ -49,13 +49,15 @@ async def refresh_daily_plan(
             client, headers, workspace_id, kytky
         )
 
-        profile_less_count = 0
+        profile_less_kytky: list[dict[str, Any]] = []
         light_mismatches: list[dict[str, Any]] = []
         for kytka in kytky:
-            if kytka.get("care_profile_id") is None:
-                profile_less_count += 1
-                continue
             if kytka.get("status") == "dead":
+                continue
+            if kytka.get("care_profile_id") is None:
+                profile_less_kytky.append(
+                    {"id": kytka["id"], "display_name": kytka.get("display_name")}
+                )
                 continue
 
             mismatch = _light_mismatch(kytka)
@@ -109,7 +111,7 @@ async def refresh_daily_plan(
 
     return {
         "tasks": tasks,
-        "profile_less_kytky_count": profile_less_count,
+        "profile_less_kytky": profile_less_kytky,
         "everyone_away_today": everyone_away,
         "active_absences": active_absences,
         "light_mismatches": light_mismatches,
@@ -122,7 +124,7 @@ _UNRANKED_LIGHT_VALUES = {None, "unknown", "mixed"}
 def _light_mismatch(kytka: dict[str, Any]) -> dict[str, Any] | None:
     """A kytka's care profile wants a different light level than the zone
     it's actually standing in offers. Not a task — a standing config nudge,
-    recomputed fresh every refresh, same as profile_less_kytky_count."""
+    recomputed fresh every refresh, same as profile_less_kytky."""
     profile = _nested(kytka.get("care_profiles"))
     light_need = profile.get("light_need")
     if light_need in _UNRANKED_LIGHT_VALUES:

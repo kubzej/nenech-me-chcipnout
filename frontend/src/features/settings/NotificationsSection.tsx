@@ -22,14 +22,12 @@ const ON_OFF_OPTIONS = [
 type BoolPrefKey =
   | "daily_plan_enabled"
   | "critical_weather_enabled"
-  | "sick_plant_enabled"
-  | "weekly_photo_enabled";
+  | "sick_plant_enabled";
 
 const TYPE_LABELS: Record<BoolPrefKey, string> = {
   daily_plan_enabled: "Denní přehled úkolů",
   critical_weather_enabled: "Kritické počasí",
   sick_plant_enabled: "Nemocná/sledovaná kytka",
-  weekly_photo_enabled: "Týdenní foto check-in",
 };
 
 export function NotificationsSection({ onBack }: NotificationsSectionProps) {

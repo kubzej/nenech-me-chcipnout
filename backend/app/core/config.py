@@ -1,5 +1,6 @@
 from functools import cached_property
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +15,17 @@ class Settings(BaseSettings):
     vapid_public_key: str | None = None
     vapid_private_key: str | None = None
     vapid_claim_email: str | None = None
+
+    @field_validator("vapid_public_key", "vapid_private_key", mode="after")
+    @classmethod
+    def strip_vapid_keys(cls, value: str | None) -> str | None:
+        """Deploy dashboards (Railway et al.) often preserve trailing
+        whitespace/newlines when a secret is pasted in — atob() on the
+        frontend rejects that with an opaque "did not match the expected
+        pattern" error, so strip it here rather than downstream."""
+        if value is None:
+            return None
+        return value.strip() or None
 
     @cached_property
     def cors_origins(self) -> list[str]:

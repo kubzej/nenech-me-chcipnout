@@ -341,7 +341,7 @@ function buildAiPrompt(species: string, scientificName: string | null) {
     : `Jsem majitel pokojové/balkónové rostliny "${species}".`;
   const scientificNameLine = scientificName
     ? ""
-    : '  "scientific_name": <vědecký název jako string, nebo null>,\n';
+    : '  "scientific_name": <vědecký název jako string, max 160 znaků, nebo null>,\n';
 
   return `${intro} Potřebuju od tebe přesné a spolehlivé hodnoty pro moji
 aplikaci na péči o rostliny — appka z nich pak generuje připomínky
@@ -366,7 +366,7 @@ ${scientificNameLine}  "water_interval_min_days": <číslo nebo null>,
   "moisture_preference": <jedno z: "dry_between", "slightly_moist", "moist", "wet", nebo null>,
   "drought_tolerance": <jedno z: "low", "medium", "high", nebo null>,
   "overwatering_risk": <jedno z: "low", "medium", "high", nebo null>,
-  "watering_method": <praktický popis jako string, např. "zalévat, dokud voda nezačne odtékat z drenáže, mezitím nechat svrchní vrstvu proschnout">,
+  "watering_method": <praktický popis jako string, MAX 240 znaků — jedna stručná věta, např. "zalévat, dokud voda nezačne odtékat z drenáže, mezitím nechat svrchní vrstvu proschnout">,
   "light_need": <jedno z: "full_sun", "partial_sun", "bright_indirect", "shade", nebo null>,
   "heat_sensitive_above_c": <°C jako číslo, nebo null>,
   "cold_sensitive_below_c": <°C jako číslo, nebo null>,

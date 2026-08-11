@@ -26,6 +26,7 @@ export type PlaceContainerOverview = {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  kytky_count: number;
 };
 
 export type PlaceZoneOverview = {

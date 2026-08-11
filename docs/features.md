@@ -87,9 +87,7 @@ Feeds directly into Dnes's pre-departure watering logic and the away-banner.
 ## Notifikace (Push notifications)
 
 - Web Push, opt-in per device, with per-type toggles: daily plan digest,
-  critical weather, sick/monitored plant, weekly photo (this last one is a
-  settings placeholder — no dedicated trigger wired to it yet, it currently
-  just rides along inside the daily digest count).
+  critical weather, sick/monitored plant.
 - iOS-aware: detects Safari-not-installed and shows an instructional state
   ("add to Home Screen first") instead of a broken permission prompt.
 - **Daily digest**: one aggregated push per user per day ("Čeká na tebe N
@@ -98,10 +96,10 @@ Feeds directly into Dnes's pre-departure watering logic and the away-banner.
   opted-in member, not one per plant.
 - **Sick/monitoring alert**: fires immediately on the status transition,
   notifies the other member, not the person who caused it.
-- An "evening reminder" type was built, then deliberately removed the same
-  day (kept the notification surface simple for now) — fully deleted, not
-  just hidden, including its DB columns. Revisit
-  properly later if wanted.
+- An "evening reminder" type, and later a "weekly photo" toggle that had no
+  trigger behind it, were both built then deliberately removed (kept the
+  notification surface simple, no dead switches) — fully deleted, not just
+  hidden, including their DB columns. Revisit properly later if wanted.
 
 ## Auth & workspace
 

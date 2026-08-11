@@ -55,6 +55,7 @@ import type { CareEventCreateRequest, CareEventItem } from "../../types/care-eve
 import type { CareProfileItem } from "../../types/care-profile";
 import type { KytkaListItem } from "../../types/kytka";
 import type { PlantPhotoItem } from "../../types/plant-photo";
+import type { MeResponse, WorkspaceMemberItem } from "../../types/workspace";
 import "./screen.css";
 
 type KytkaDetailScreenProps = {
@@ -74,6 +75,8 @@ export function KytkaDetailScreen({
 }: KytkaDetailScreenProps) {
   const [events, setEvents] = useState<CareEventItem[]>([]);
   const [photos, setPhotos] = useState<PlantPhotoItem[]>([]);
+  const [members, setMembers] = useState<WorkspaceMemberItem[]>([]);
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -97,12 +100,16 @@ export function KytkaDetailScreen({
     setIsLoading(true);
 
     try {
-      const [eventsData, photosData] = await Promise.all([
+      const [eventsData, photosData, membersData, meData] = await Promise.all([
         apiGetAuthed<CareEventItem[]>(`/api/kytky/${kytka.id}/events`),
         apiGetAuthed<PlantPhotoItem[]>(`/api/kytky/${kytka.id}/photos`),
+        apiGetAuthed<WorkspaceMemberItem[]>("/api/workspaces/members"),
+        apiGetAuthed<MeResponse>("/api/me"),
       ]);
       setEvents(eventsData);
       setPhotos(photosData);
+      setMembers(membersData);
+      setMe(meData);
     } catch (loadError) {
       setError(
         loadError instanceof Error ? loadError.message : "Historie se nenačetla.",
@@ -286,6 +293,13 @@ export function KytkaDetailScreen({
     }
   }
 
+  function memberLabel(userId: string): string {
+    if (me && userId === me.user_id) {
+      return "Já";
+    }
+    return members.find((member) => member.user_id === userId)?.display_name ?? "Partner";
+  }
+
   const profileLines = careProfile ? buildProfileSummaryLines(careProfile) : [];
   const timeline = buildTimeline(events, photos);
   const isAnySheetOpen =
@@ -419,7 +433,8 @@ export function KytkaDetailScreen({
                       </Text>
                     </div>
                     <Text as="span" tone="muted" variant="caption">
-                      {formatEventDateTime(entry.event.occurred_at)}
+                      {formatEventDateTime(entry.event.occurred_at)} ·{" "}
+                      {memberLabel(entry.event.recorded_by)}
                     </Text>
                     {formatEventDetail(entry.event) ? (
                       <Text as="span" tone="muted" variant="caption">

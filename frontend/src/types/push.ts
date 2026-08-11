@@ -5,7 +5,6 @@ export type NotificationPreferencesItem = {
   daily_plan_enabled: boolean;
   critical_weather_enabled: boolean;
   sick_plant_enabled: boolean;
-  weekly_photo_enabled: boolean;
   morning_time: string;
   timezone: string;
   created_at: string;
@@ -17,7 +16,6 @@ export type NotificationPreferencesUpdate = {
   daily_plan_enabled?: boolean;
   critical_weather_enabled?: boolean;
   sick_plant_enabled?: boolean;
-  weekly_photo_enabled?: boolean;
   morning_time?: string;
 };
 

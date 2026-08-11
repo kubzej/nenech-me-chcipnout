@@ -79,9 +79,14 @@ class LightMismatchItem(BaseModel):
     light_exposure: str
 
 
+class ProfileLessKytkaItem(BaseModel):
+    id: UUID
+    display_name: str | None
+
+
 class DailyPlanResponse(BaseModel):
     tasks: list[CareTaskItem]
-    profile_less_kytky_count: int
+    profile_less_kytky: list[ProfileLessKytkaItem]
     everyone_away_today: bool
     active_absences: list[ActiveAbsenceItem]
     light_mismatches: list[LightMismatchItem]

@@ -51,9 +51,14 @@ export type LightMismatchItem = {
   light_exposure: string;
 };
 
+export type ProfileLessKytkaItem = {
+  id: string;
+  display_name: string | null;
+};
+
 export type DailyPlanResponse = {
   tasks: CareTaskItem[];
-  profile_less_kytky_count: number;
+  profile_less_kytky: ProfileLessKytkaItem[];
   everyone_away_today: boolean;
   active_absences: ActiveAbsenceItem[];
   light_mismatches: LightMismatchItem[];

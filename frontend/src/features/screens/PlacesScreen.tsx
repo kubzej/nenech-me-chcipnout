@@ -155,10 +155,12 @@ export function PlacesScreen() {
 
   async function handleDeleteLocation(location: PlaceLocationOverview) {
     const zoneCount = location.zones.length;
-    const confirmMessage =
-      zoneCount > 0
-        ? `Smazat místo „${location.name}" a ${zoneCount} zón(y) v něm?`
-        : `Smazat místo „${location.name}"?`;
+    const kytkyCount = countKytkyInZones(location.zones);
+    const confirmMessage = buildDeleteConfirm(
+      `Smazat místo „${location.name}"`,
+      zoneCount > 0 ? `${zoneCount} zón(y) v něm` : null,
+      kytkyCount,
+    );
 
     if (!window.confirm(confirmMessage)) {
       return;
@@ -251,10 +253,12 @@ export function PlacesScreen() {
 
   async function handleDeleteZone(zone: PlaceZoneOverview) {
     const containerCount = zone.containers.length;
-    const confirmMessage =
-      containerCount > 0
-        ? `Smazat zónu „${zone.name}" a ${containerCount} nádob(y) v ní?`
-        : `Smazat zónu „${zone.name}"?`;
+    const kytkyCount = zone.containers.reduce((sum, c) => sum + c.kytky_count, 0);
+    const confirmMessage = buildDeleteConfirm(
+      `Smazat zónu „${zone.name}"`,
+      containerCount > 0 ? `${containerCount} nádob(y) v ní` : null,
+      kytkyCount,
+    );
 
     if (!window.confirm(confirmMessage)) {
       return;
@@ -349,7 +353,13 @@ export function PlacesScreen() {
   }
 
   async function handleDeleteContainer(container: PlaceContainerOverview) {
-    if (!window.confirm(`Smazat nádobu „${container.name}"?`)) {
+    const confirmMessage = buildDeleteConfirm(
+      `Smazat nádobu „${container.name}"`,
+      null,
+      container.kytky_count,
+    );
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
@@ -720,6 +730,30 @@ export function PlacesScreen() {
       ) : null}
     </section>
   );
+}
+
+function countKytkyInZones(zones: PlaceZoneOverview[]): number {
+  return zones.reduce(
+    (sum, zone) => sum + zone.containers.reduce((s, c) => s + c.kytky_count, 0),
+    0,
+  );
+}
+
+function formatKytkyCount(count: number) {
+  return count === 1 ? '1 kytkou' : `${count} kytkami`;
+}
+
+function buildDeleteConfirm(
+  action: string,
+  nestedLabel: string | null,
+  kytkyCount: number,
+): string {
+  const suffix = nestedLabel ? ` a ${nestedLabel}` : '';
+  const kytkyWarning =
+    kytkyCount > 0
+      ? ` Smažou se i s ${formatKytkyCount(kytkyCount)} a jejich historií — natrvalo.`
+      : '';
+  return `${action}${suffix}?${kytkyWarning}`;
 }
 
 function formatContainerCount(count: number) {

@@ -20,6 +20,7 @@ from app.schemas.care_tasks import (
     CareTaskSkipRequest,
     DailyPlanResponse,
     LightMismatchItem,
+    ProfileLessKytkaItem,
 )
 from app.services.daily_plan import refresh_daily_plan
 from app.services.workspaces import get_first_workspace
@@ -44,7 +45,9 @@ async def get_today_plan(
 
     return DailyPlanResponse(
         tasks=[CareTaskItem(**row) for row in result["tasks"]],
-        profile_less_kytky_count=result["profile_less_kytky_count"],
+        profile_less_kytky=[
+            ProfileLessKytkaItem(**row) for row in result["profile_less_kytky"]
+        ],
         everyone_away_today=result["everyone_away_today"],
         active_absences=[
             ActiveAbsenceItem(**row) for row in result["active_absences"]
