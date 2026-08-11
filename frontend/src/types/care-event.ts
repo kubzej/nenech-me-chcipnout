@@ -4,18 +4,12 @@ export type CareEventType =
   | "checkin"
   | "pest_observation"
   | "treatment"
-  | "maintenance"
-  | "weather_protection";
+  | "maintenance";
 
-export type CareEventCondition =
-  | "ok"
-  | "dry"
-  | "wet"
-  | "wilting"
-  | "yellowing"
-  | "pests"
-  | "damaged"
-  | "unknown";
+// "Jak na tom je?" — sets kytky.status directly. Older events may still
+// carry legacy symptom values (dry/wet/wilting/...); those are read-only
+// history now, see PlantPhotoHealthSnapshot for the still-live symptom set.
+export type CareEventCondition = "ok" | "monitoring" | "sick";
 
 export type CareEventItem = {
   id: string;

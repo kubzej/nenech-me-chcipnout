@@ -47,4 +47,4 @@ class NotificationPreferencesUpdate(BaseModel):
 
 class TestNotificationRequest(BaseModel):
     title: str = "Nenech mě chcípnout!"
-    body: str = "Testovací notifikace funguje."
+    body: str = "Test. Kdyby některá umírala doopravdy, poznal bys to jinak."

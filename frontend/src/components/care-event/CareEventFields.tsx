@@ -1,7 +1,7 @@
 import { ChoiceField } from "../ui/ChoiceField";
 import { Text } from "../ui/Text";
 import { TextField } from "../ui/TextField";
-import type { CareEventCreateRequest } from "../../types/care-event";
+import type { CareEventCondition, CareEventCreateRequest } from "../../types/care-event";
 
 export const DEFAULT_CARE_EVENT_VALUES: Omit<CareEventCreateRequest, "kytka_id"> = {
   event_type: "watering",
@@ -14,6 +14,9 @@ export const DEFAULT_CARE_EVENT_VALUES: Omit<CareEventCreateRequest, "kytka_id">
 
 type CareEventFieldsProps = {
   disabled?: boolean;
+  /** Kytka's current status — pre-selects "Jak jí je?" so saving
+   * without touching it makes no change. */
+  kytkaStatus?: string;
   onChange: (patch: Partial<Omit<CareEventCreateRequest, "kytka_id">>) => void;
   onPhotoChange?: (file: File | null) => void;
   photoFile?: File | null;
@@ -23,6 +26,7 @@ type CareEventFieldsProps = {
 
 export function CareEventFields({
   disabled = false,
+  kytkaStatus,
   onChange,
   onPhotoChange,
   photoFile,
@@ -93,10 +97,13 @@ export function CareEventFields({
       {showCondition ? (
         <ChoiceField
           disabled={disabled}
-          label="Stav rostliny"
+          label="Jak jí je?"
           onValueChange={(value) => onChange({ condition: value })}
-          options={CONDITION_OPTIONS}
-          value={values.condition ?? "unknown"}
+          options={PLANT_STATUS_OPTIONS}
+          value={
+            values.condition ??
+            (isPlantStatus(kytkaStatus) ? kytkaStatus : "ok")
+          }
         />
       ) : null}
       {showCondition && onPhotoChange ? (
@@ -125,6 +132,10 @@ export function CareEventFields({
       />
     </>
   );
+}
+
+function isPlantStatus(value: string | undefined): value is CareEventCondition {
+  return value === "ok" || value === "monitoring" || value === "sick";
 }
 
 function parseOptionalInt(value: string): number | null {
@@ -173,10 +184,19 @@ const EVENT_TYPE_OPTIONS = [
   { label: "Škůdci", value: "pest_observation" },
   { label: "Ošetření", value: "treatment" },
   { label: "Údržba", value: "maintenance" },
-  { label: "Ochrana před počasím", value: "weather_protection" },
 ] as const;
 
-export const CONDITION_OPTIONS = [
+// "Jak jí je?" — sets kytky.status directly, no inferred rules.
+export const PLANT_STATUS_OPTIONS = [
+  { label: "OK", value: "ok" },
+  { label: "Sledovaná", value: "monitoring" },
+  { label: "Nemocná", value: "sick" },
+] as const;
+
+// Legacy symptom picklist — still used for the standalone photo's health
+// snapshot (a descriptive tag, not a status-setting field), and to label
+// old care_events rows logged before this field became "Jak jí je?".
+export const PHOTO_HEALTH_OPTIONS = [
   { label: "Nevím", value: "unknown" },
   { label: "OK", value: "ok" },
   { label: "Suchý", value: "dry" },

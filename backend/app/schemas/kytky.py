@@ -29,7 +29,7 @@ class KytkaCreateRequest(BaseModel):
     container_id: UUID
     care_profile_id: UUID | None = None
     display_name: str = Field(min_length=1, max_length=120)
-    status: Literal["ok", "monitoring", "sick", "dormant", "dead"] = "ok"
+    status: Literal["ok", "monitoring", "sick", "dormant"] = "ok"
     acquired_on: date | None = None
     notes: str | None = None
 

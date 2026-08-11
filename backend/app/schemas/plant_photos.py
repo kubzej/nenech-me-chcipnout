@@ -1,9 +1,15 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
-from app.schemas.care_events import CareEventCondition
+# Independent from CareEventCondition — this just labels a standalone
+# photo for the timeline, it never drives a status transition, so it kept
+# the original wider symptom vocabulary.
+PlantPhotoHealthSnapshot = Literal[
+    "ok", "dry", "wet", "wilting", "yellowing", "pests", "damaged", "unknown"
+]
 
 
 class PlantPhotoItem(BaseModel):
@@ -23,7 +29,7 @@ class PlantPhotoCreateRequest(BaseModel):
     storage_path: str
     captured_at: datetime | None = None
     note: str | None = None
-    health_snapshot: CareEventCondition | None = None
+    health_snapshot: PlantPhotoHealthSnapshot | None = None
     care_event_id: UUID | None = None
 
     @field_validator("storage_path")

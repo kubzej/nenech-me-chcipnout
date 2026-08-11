@@ -2,7 +2,6 @@ import type { FormEvent } from "react";
 import { Hero } from "../../components/layout/Hero";
 import { Text } from "../../components/ui/Text";
 import { AuthPanel } from "../auth/AuthPanel";
-import { WelcomeVisual } from "./WelcomeVisual";
 import "./welcome-screen.css";
 
 type WelcomeScreenProps = {
@@ -30,15 +29,14 @@ export function WelcomeScreen({
     <div className="welcome-screen">
       <div className="welcome-screen__content">
         <Hero title="Nenech mě chcípnout!" />
-        <WelcomeVisual />
         <Text
           as="p"
           variant="body"
           tone="muted"
           className="welcome-screen__copy"
         >
-          Přihlas se, ať tenhle naštvaný list nemusí osobně vysvětlovat muškátům,
-          proč zase umírají žízní.
+          Appka pro lidi, kterým umírá i kaktus. Kytky nejsou
+          samoobslužné, i když ses to roky snažil předstírat.
         </Text>
         <AuthPanel
           email={email}

@@ -80,10 +80,22 @@ export function usePushNotifications() {
       }
 
       const vapid = await apiGetAuthed<VapidKeyResponse>("/api/push/vapid-key");
+
+      let applicationServerKey: Uint8Array;
+      try {
+        applicationServerKey = urlBase64ToUint8Array(vapid.public_key);
+      } catch (decodeError) {
+        throw new Error(
+          `VAPID klíč ze serveru se nepodařilo dekódovat (délka ${vapid.public_key.length} znaků): ${
+            decodeError instanceof Error ? decodeError.message : String(decodeError)
+          }`,
+        );
+      }
+
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapid.public_key) as BufferSource,
+        applicationServerKey: applicationServerKey as BufferSource,
       });
 
       const json = subscription.toJSON();

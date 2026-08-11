@@ -1,0 +1,56 @@
+.sergeant-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.sergeant-intro__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 24, 14, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.sergeant-intro__panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  width: min(380px, calc(100vw - 2 * var(--space-5)));
+  max-height: calc(100vh - 2 * var(--space-5));
+  overflow-y: auto;
+  padding: calc(var(--space-6) + env(safe-area-inset-top)) var(--space-5) var(--space-5);
+  border-radius: 28px;
+  background: var(--color-surface);
+  box-shadow: 0 30px 70px rgba(16, 24, 14, 0.4);
+  text-align: center;
+}
+
+.sergeant-intro__face {
+  width: min(170px, 44vw);
+  max-height: 30vh;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 26px rgba(24, 35, 21, 0.25));
+  margin-bottom: var(--space-2);
+}
+
+.sergeant-intro__eyebrow {
+  margin: 0;
+}
+
+.sergeant-intro__title {
+  margin: 0 0 var(--space-2);
+}
+
+.sergeant-intro__body {
+  margin: 0;
+  max-width: 46ch;
+}
+
+.sergeant-intro__panel .button {
+  margin-top: var(--space-3);
+  width: 100%;
+}

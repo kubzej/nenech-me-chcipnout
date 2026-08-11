@@ -22,7 +22,7 @@ export type KytkaCreateRequest = {
   container_id: string;
   care_profile_id?: string | null;
   display_name: string;
-  status?: "ok" | "monitoring" | "sick" | "dormant" | "dead";
+  status?: "ok" | "monitoring" | "sick" | "dormant";
   acquired_on?: string | null;
   notes?: string | null;
 };

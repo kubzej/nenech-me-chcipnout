@@ -11,13 +11,14 @@ CareEventType = Literal[
     "pest_observation",
     "treatment",
     "maintenance",
-    "weather_protection",
     "photo_observation",
 ]
 
-CareEventCondition = Literal[
-    "ok", "dry", "wet", "wilting", "yellowing", "pests", "damaged", "unknown"
-]
+# Logging a checkin/pest_observation can directly set the Kytka's status —
+# "Jak na tom je?" (OK / Sledovat / Nemocná), no inferred symptom taxonomy.
+# Older rows may still carry the legacy values (dry/wet/wilting/...); those
+# are read-only history now, never written by current app code.
+CareEventCondition = Literal["ok", "monitoring", "sick"]
 
 
 class CareEventItem(BaseModel):

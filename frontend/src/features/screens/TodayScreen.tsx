@@ -77,7 +77,7 @@ const QUICK_TASK_BUSY_LABEL: Record<QuickTaskType, string> = {
 const DETAILED_TASK_EVENT_DEFAULTS: Record<string, CareEventCreateRequest["event_type"]> = {
   checkin: "checkin",
   pest_followup: "pest_observation",
-  weather_protection: "weather_protection",
+  weather_protection: "treatment",
   maintenance: "maintenance",
 };
 
@@ -348,7 +348,7 @@ export function TodayScreen() {
         <div className="today-banner">
           <Plane aria-hidden="true" size={20} />
           <Text as="p" variant="body">
-            Oba jste pryč. Kytky teď musí přežít bez dozoru.
+            Oba jste pryč. Fajn, ať si teď kytky poradí samy.
           </Text>
         </div>
       ) : null}
@@ -450,6 +450,11 @@ export function TodayScreen() {
           <form onSubmit={handleSubmitDetailed}>
             <CareEventFields
               disabled={isSaving}
+              kytkaStatus={
+                activeTask?.kytka_id
+                  ? kytkaById.get(activeTask.kytka_id)?.status
+                  : undefined
+              }
               onChange={(patch) =>
                 setFormValues((current) => ({ ...current, ...patch }))
               }
@@ -633,7 +638,7 @@ function formatLightMismatchList(mismatches: LightMismatchItem[]): string {
     const zone = mismatch.zone_name ? ` (${mismatch.zone_name})` : "";
     return `${name} chce ${need}, ale má ${exposure}${zone}`;
   });
-  return `Možná nejsem na správném místě: ${parts.join("; ")}.`;
+  return `Asi nejsou na správném místě: ${parts.join("; ")}.`;
 }
 
 function formatProfileLessList(kytky: ProfileLessKytkaItem[]): string {

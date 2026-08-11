@@ -31,8 +31,9 @@ import {
 } from "../../components/care-profile/CareProfileFields";
 import {
   CareEventFields,
-  CONDITION_OPTIONS,
   DEFAULT_CARE_EVENT_VALUES,
+  PHOTO_HEALTH_OPTIONS,
+  PLANT_STATUS_OPTIONS,
 } from "../../components/care-event/CareEventFields";
 import { PlantAvatar } from "../../components/avatar/PlantAvatar";
 import { Button } from "../../components/ui/Button";
@@ -508,6 +509,7 @@ export function KytkaDetailScreen({
           <form onSubmit={handleSubmitEvent}>
             <CareEventFields
               disabled={isSaving}
+              kytkaStatus={kytka.status}
               onChange={(patch) =>
                 setFormValues((current) => ({ ...current, ...patch }))
               }
@@ -544,7 +546,7 @@ export function KytkaDetailScreen({
               disabled={isUploadingPhoto}
               label="Stav rostliny"
               onValueChange={setStandaloneHealth}
-              options={CONDITION_OPTIONS}
+              options={PHOTO_HEALTH_OPTIONS}
               value={standaloneHealth}
             />
             <TextField
@@ -800,7 +802,9 @@ const STATUS_LABELS: Record<string, string> = {
   ok: "OK",
   monitoring: "sledovaná",
   sick: "nemocná",
-  dormant: "dormantní",
+  dormant: "klidová",
+  // "dead" is no longer settable, kept only so any pre-existing kytka
+  // still displays sensibly instead of showing the raw code.
   dead: "mrtvá",
 };
 
@@ -831,7 +835,9 @@ function formatEventDateTime(iso: string) {
 function formatEventDetail(event: CareEventItem) {
   const parts: string[] = [];
   if (event.condition && event.condition !== "unknown") {
-    parts.push(findLabel(CONDITION_OPTIONS, event.condition));
+    parts.push(
+      findLabel([...PLANT_STATUS_OPTIONS, ...PHOTO_HEALTH_OPTIONS], event.condition),
+    );
   }
   if (event.method) {
     parts.push(event.method);

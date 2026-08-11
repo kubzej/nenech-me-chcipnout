@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -19,6 +19,7 @@ _DORMANT_MULTIPLIER = 3
 _NEGLECT_ESCALATION_MULTIPLIER = 2
 _ABSENCE_LOOKAHEAD_DAYS = 3
 _INSPECTION_EVENT_TYPES = ("checkin", "pest_observation", "treatment")
+_WEATHER_CACHE_HOURS = 3
 
 _TASK_SELECT = (
     "id,task_date,task_type,target_type,kytka_id,container_id,status,priority,"
@@ -46,7 +47,7 @@ async def refresh_daily_plan(
         )
 
         forecasts = await _fetch_and_snapshot_weather(
-            client, headers, workspace_id, kytky
+            client, headers, workspace_id, kytky, today
         )
 
         profile_less_kytky: list[dict[str, Any]] = []
@@ -321,8 +322,16 @@ async def _fetch_and_snapshot_weather(
     headers: dict[str, str],
     workspace_id: object,
     kytky: list[dict[str, Any]],
+    today: date,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Returns {location_id: [daily forecast dicts]}."""
+    """Returns {location_id: [daily forecast dicts]}.
+
+    refresh_daily_plan runs on every Dnes load *and* every cron tick
+    (~every 15 min) — calling Open-Meteo on each one blew through its
+    daily request quota. Reuse a recent snapshot instead of re-fetching
+    every time; weather_daily_snapshots already existed for this, it was
+    just never read back.
+    """
     locations: dict[str, dict[str, Any]] = {}
     for kytka in kytky:
         container = _nested(kytka.get("containers"))
@@ -333,6 +342,13 @@ async def _fetch_and_snapshot_weather(
 
     forecasts: dict[str, list[dict[str, Any]]] = {}
     for location_id, location in locations.items():
+        cached = await _fetch_cached_forecast(
+            client, headers, workspace_id, location_id, today
+        )
+        if cached is not None:
+            forecasts[location_id] = cached
+            continue
+
         forecast_json = await fetch_forecast_json(
             float(location["latitude"]),
             float(location["longitude"]),
@@ -345,6 +361,52 @@ async def _fetch_and_snapshot_weather(
         )
 
     return forecasts
+
+
+async def _fetch_cached_forecast(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    workspace_id: object,
+    location_id: str,
+    today: date,
+) -> list[dict[str, Any]] | None:
+    response = await client.get(
+        "/weather_daily_snapshots",
+        headers=headers,
+        params={
+            "select": "forecast_date,temp_min_c,temp_max_c,precipitation_mm,"
+            "precipitation_probability_max,weather_code,fetched_at",
+            "workspace_id": f"eq.{workspace_id}",
+            "location_id": f"eq.{location_id}",
+            "source": "eq.open-meteo",
+            "forecast_date": f"gte.{today.isoformat()}",
+            "order": "forecast_date.asc",
+        },
+    )
+    raise_supabase_error(response)
+    rows = response.json()
+
+    todays_row = next(
+        (row for row in rows if row["forecast_date"] == today.isoformat()), None
+    )
+    if todays_row is None:
+        return None
+
+    fetched_at = datetime.fromisoformat(todays_row["fetched_at"])
+    if fetched_at < datetime.now(UTC) - timedelta(hours=_WEATHER_CACHE_HOURS):
+        return None
+
+    return [
+        {
+            "date": row["forecast_date"],
+            "temp_min_c": row["temp_min_c"],
+            "temp_max_c": row["temp_max_c"],
+            "precipitation_sum_mm": row["precipitation_mm"],
+            "precipitation_probability_max": row["precipitation_probability_max"],
+            "weather_code": row["weather_code"],
+        }
+        for row in rows
+    ]
 
 
 def _parse_daily(daily: object) -> list[dict[str, Any]]:
@@ -541,12 +603,13 @@ async def _generate_for_kytka(
             if gating_days_since >= interval:
                 if days_since is not None:
                     fertilizing_explanation = (
-                        f"Poslední hnojení před {days_since} dny. "
-                        f"Přihnoj mě, ať mám sílu růst."
+                        f"Poslední hnojení před {days_since} dny. Hlady "
+                        f"neumírá, ale nálada by šla zlepšit."
                     )
                 else:
                     fertilizing_explanation = (
-                        "Ještě mě nikdo nehnojil. Přihnoj mě, ať mám z čeho růst."
+                        "Nikdy jsi ji nehnojil. Roste na charisma — "
+                        "jak dlouho myslíš, že to vydrží?"
                     )
 
                 await _upsert_task(
@@ -594,11 +657,14 @@ async def _generate_for_kytka(
                 priority=priority,
                 title="Zkontrolovat",
                 explanation=(
-                    "Mrkni na mě — podívej se na listy a na hlínu, "
-                    "jestli je něco v nepořádku."
+                    "Mrkni na ni, jestli náhodou nezačíná vypadat "
+                    "jako tvoje priorita číslo 47."
                 )
                 if not is_sick_or_monitoring
-                else "Sleduju se přísněji — pořádně mě zkontroluj, listy i hlínu.",
+                else (
+                    "Je pod dohledem — žádné povrchní mrknutí, "
+                    "pořádně, listy i hlína."
+                ),
                 recommendation_json={
                     "check_interval_days": effective_check,
                     "days_since_last_event": days_since,
@@ -624,8 +690,8 @@ async def _generate_for_kytka(
                 priority=priority,
                 title="Zkontrolovat škůdce",
                 explanation=(
-                    f"Před {days_since} dny jsi u mě viděl škůdce. "
-                    f"Zkontroluj, jestli jsou pryč, nebo se vrátili."
+                    f"Před {days_since} dny sis všiml škůdců. Jestli sis "
+                    f"myslel, že zmizí samy, mrkni, jak to dopadlo."
                 ),
                 recommendation_json={
                     "pest_check_interval_days": pest_interval,
@@ -654,7 +720,10 @@ async def _generate_for_kytka(
                 task_date=today,
                 priority="low",
                 title="Vyfotit",
-                explanation="Vyfoť mě pro časovou osu, ať vidíš, jak rostu.",
+                explanation=(
+                    "Vyfoť ji pro časovou osu — jestli teda ještě roste, "
+                    "a ne že jen přežívá."
+                ),
                 recommendation_json={
                     "photo_interval_days": photo_interval,
                     "days_since_last_event": days_since,
@@ -675,8 +744,8 @@ async def _generate_for_kytka(
         if gating_days_since >= maintenance_interval:
             notes = profile.get("maintenance_notes")
             explanation = notes if notes else (
-                "Čas na údržbu — mrkni, jestli mě není potřeba "
-                "prořezat, přesadit nebo otočit."
+                "Čas na údržbu. Prořezat, přesadit, otočit — "
+                "něco z toho určitě dlužíš."
             )
             await _upsert_task(
                 client,
@@ -731,8 +800,8 @@ async def _generate_for_kytka(
                 priority="high",
                 title="Ochránit před mrazem",
                 explanation=(
-                    f"Dnes bude {temp_min} °C a mráz mi nedělá dobře. "
-                    f"Dej mě dovnitř, nebo mě něčím zabal."
+                    f"Dnes bude {temp_min} °C. Mráz jí nedělá dobře — "
+                    f"dej ji dovnitř, nebo ji aspoň něčím přikryj."
                 ),
                 recommendation_json={
                     "forecast_temp_min_c": temp_min,
@@ -753,8 +822,8 @@ async def _generate_for_kytka(
                 priority="high",
                 title="Ochránit před horkem",
                 explanation=(
-                    f"Dnes bude {temp_max} °C a to už na mě je moc. "
-                    f"Přesuň mě do stínu, nebo mě pořádně zalij."
+                    f"Dnes bude {temp_max} °C. To už není opalování, "
+                    f"to je poprava — stín, nebo pořádná zálivka."
                 ),
                 recommendation_json={
                     "forecast_temp_max_c": temp_max,
@@ -798,17 +867,20 @@ def _watering_explanation(
     amount_ml: int | None,
     method: str | None,
 ) -> str:
-    dormant_note = " Jsem v klidu, stačí míň často." if is_dormant else ""
+    dormant_note = " Má klidové období — netřeba víc." if is_dormant else ""
     how = ""
     if amount_ml:
         how += f" Asi {amount_ml} ml."
     if method:
         how += f" Metoda: {method}."
     if days_since is None:
-        return f"Zatím mě nikdo nezalil. Zalij mě, ať tu nevydechnu.{how}{dormant_note}"
+        return (
+            f"Ještě jsi ji ani jednou nezalil. Na to nejsi "
+            f"hrdý, doufám.{how}{dormant_note}"
+        )
     return (
-        f"Poslední zálivka před {days_since} dny. "
-        f"Zalij mě, ať nevyschnu.{how}{dormant_note}"
+        f"Poslední zálivka před {days_since} dny. Myslíš, "
+        f"že se zalévá sama?{how}{dormant_note}"
     )
 
 
@@ -848,19 +920,19 @@ def _departure_note(
 
     if pulled_forward:
         if days_until_departure <= 0:
-            note = "Dnes odjíždíš — zalij mě teď navíc, ať to vydržím, než se vrátíš."
+            note = "Dnes odjíždíš. Zalij ji navíc, ať tu ještě je, až se vrátíš."
         else:
             note = (
-                f"Za {days_until_departure} dny odjíždíš — zalij mě teď, "
-                f"ať to vydržím, než se vrátíš."
+                f"Za {days_until_departure} dny odjíždíš — zalij ji teď, "
+                f"ať tu ještě je, až dorazíš zpátky."
             )
     else:
-        note = "Brzy odjíždíš, tak mě zalij pořádně, ať to vydržím."
+        note = "Brzy odjíždíš, tak ji zalij pořádně — improvizace jí neodpouští."
 
     if effective_max_interval is not None and trip_days > effective_max_interval:
         note += (
-            " Tahle cesta je na mě dlouhá i s čerstvou zálivkou — zkus někoho "
-            "poprosit, ať se na mě mrkne v půlce cesty."
+            " I s čerstvou zálivkou je tahle cesta na ni moc dlouhá — "
+            "sežeň někoho, kdo se na ni mrkne v půlce."
         )
 
     return note

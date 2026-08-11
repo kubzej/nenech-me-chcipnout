@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CalendarCheck, Leaf, MapPin, Settings } from "lucide-react";
 import { BottomNav, type NavItem } from "../../components/layout/BottomNav";
+import { SergeantIntroModal } from "../onboarding/SergeantIntroModal";
 import { PlacesScreen } from "../screens/PlacesScreen";
 import { PlantsScreen } from "../screens/PlantsScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
@@ -39,6 +40,7 @@ export function AuthenticatedApp({ onLogout }: AuthenticatedAppProps) {
 
   return (
     <div className="authenticated-app">
+      <SergeantIntroModal />
       {renderScreen()}
       <BottomNav
         activeItemId={activeTab}

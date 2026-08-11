@@ -12,11 +12,11 @@ from app.services.push import send_push_notification
 
 logger = logging.getLogger(__name__)
 
-_BAD_CONDITIONS = {"wilting", "yellowing", "pests", "damaged"}
-_CONDITION_EVENT_TYPES = {"checkin", "pest_observation"}
+_STATUS_EVENT_TYPES = {"checkin", "pest_observation"}
+_SETTABLE_STATUSES = {"ok", "monitoring", "sick"}
 
 
-async def maybe_transition_from_condition(
+async def maybe_set_status(
     headers: dict[str, str],
     workspace_id: object,
     kytka_id: UUID,
@@ -24,37 +24,19 @@ async def maybe_transition_from_condition(
     condition: str | None,
     actor_user_id: object | None = None,
 ) -> None:
-    """Auto-transition a Kytka's status based on a just-logged condition.
-
-    Only ever moves ok<->monitoring. Never touches sick/dormant/dead —
-    those stay manual-only, matching the product's "not exclusively
-    automatic" status principle.
+    """"Jak na tom je?" on a checkin/pest_observation directly sets the
+    Kytka's status — no inferred symptom rules, no precondition on the
+    current status (a dormant or already-sick Kytka reacts exactly like
+    an ok one). Dormant/archived stay untouched here — always manual via
+    Upravit kytku.
     """
-    if event_type not in _CONDITION_EVENT_TYPES:
+    if event_type not in _STATUS_EVENT_TYPES or condition not in _SETTABLE_STATUSES:
         return
 
-    # Logging a pest observation at all already means "I saw something" —
-    # don't force a second, redundant "Stav rostliny: Škůdci" pick just to
-    # get the same signal. condition="ok" is still the explicit "checked,
-    # they're gone" override that clears it back.
-    effective_condition = condition
-    if event_type == "pest_observation" and condition is None:
-        effective_condition = "pests"
-
-    if effective_condition is None:
-        return
-
-    if effective_condition in _BAD_CONDITIONS:
-        kytka = await _patch_status_if_current(
-            headers, workspace_id, kytka_id, "ok", "monitoring"
-        )
-        if kytka:
-            await _notify_sick_plant_safe(
-                workspace_id, kytka["display_name"], actor_user_id
-            )
-    elif effective_condition == "ok":
-        await _patch_status_if_current(
-            headers, workspace_id, kytka_id, "monitoring", "ok"
+    kytka = await _set_status_if_changed(headers, workspace_id, kytka_id, condition)
+    if kytka and condition in ("monitoring", "sick"):
+        await _notify_sick_plant_safe(
+            workspace_id, kytka["display_name"], actor_user_id
         )
 
 
@@ -69,6 +51,34 @@ async def escalate_to_monitoring(
         await _notify_sick_plant_safe(
             workspace_id, kytka["display_name"], actor_user_id=None
         )
+
+
+async def _set_status_if_changed(
+    headers: dict[str, str],
+    workspace_id: object,
+    kytka_id: UUID,
+    new_status: str,
+) -> dict[str, object] | None:
+    async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
+        response = await client.patch(
+            "/kytky",
+            headers={
+                **headers,
+                "Content-Type": "application/json",
+                "Prefer": "return=representation",
+            },
+            params={
+                "id": f"eq.{kytka_id}",
+                "workspace_id": f"eq.{workspace_id}",
+                "status": f"neq.{new_status}",
+                "select": "id,display_name",
+            },
+            json={"status": new_status},
+        )
+        raise_supabase_error(response)
+
+    rows = response.json()
+    return rows[0] if rows else None
 
 
 async def _patch_status_if_current(
@@ -144,8 +154,8 @@ async def _notify_sick_plant(
             row["user_id"],
             title="Sledovaná kytka",
             body=(
-                f"{kytka_display_name} potřebuje pozornost — "
-                f"přepnul jsem ji na sledování."
+                f"{kytka_display_name} vypadá podezřele. Dal jsem ji "
+                f"pod dohled — teď je řada na tobě."
             ),
             url="/",
             tag="sick-plant",

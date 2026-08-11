@@ -401,8 +401,10 @@ function wateringButtonLabel(
 
 function formatStatus(status: string) {
   const labels: Record<string, string> = {
+    // "dead" is no longer settable, kept so a pre-existing kytka still
+    // displays sensibly instead of showing the raw code.
     dead: "mrtvá",
-    dormant: "dormantní",
+    dormant: "klidová",
     monitoring: "sledovaná",
     ok: "OK",
     sick: "nemocná",
@@ -425,6 +427,5 @@ const STATUS_OPTIONS = [
   { label: "OK", value: "ok" },
   { label: "Sledovaná", value: "monitoring" },
   { label: "Nemocná", value: "sick" },
-  { label: "Dormantní", value: "dormant" },
-  { label: "Mrtvá", value: "dead" },
+  { label: "Klidová", value: "dormant" },
 ] as const;
