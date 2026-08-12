@@ -22,7 +22,8 @@ _SELECT = (
     "heat_sensitive_above_c,cold_sensitive_below_c,frost_sensitive,"
     "feeding_enabled,feeding_interval_days,feeding_months,check_interval_days,"
     "photo_interval_days,pest_check_interval_days,maintenance_interval_days,"
-    "maintenance_notes,risk_notes,created_at,updated_at"
+    "maintenance_notes,risk_notes,survival_watering_hint,survival_heat_hint,"
+    "survival_frost_hint,survival_fertilizing_hint,created_at,updated_at"
 )
 
 

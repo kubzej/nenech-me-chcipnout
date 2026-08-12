@@ -1,3 +1,4 @@
+from asyncio import gather
 from collections import Counter
 from datetime import UTC, datetime
 from uuid import UUID
@@ -35,59 +36,63 @@ async def places_overview(
     headers = supabase_user_headers(current_user.access_token)
 
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
-        locations_response = await client.get(
-            "/locations",
-            headers=headers,
-            params={
-                "select": (
-                    "id,name,address_label,latitude,longitude,timezone,notes,"
-                    "created_at,updated_at"
-                ),
-                "workspace_id": f"eq.{workspace['id']}",
-                "archived_at": "is.null",
-                "order": "created_at.asc",
-            },
+        (
+            locations_response,
+            zones_response,
+            containers_response,
+            kytky_response,
+        ) = await gather(
+            client.get(
+                "/locations",
+                headers=headers,
+                params={
+                    "select": (
+                        "id,name,address_label,latitude,longitude,timezone,notes,"
+                        "created_at,updated_at"
+                    ),
+                    "workspace_id": f"eq.{workspace['id']}",
+                    "archived_at": "is.null",
+                    "order": "created_at.asc",
+                },
+            ),
+            client.get(
+                "/zones",
+                headers=headers,
+                params={
+                    "select": (
+                        "id,location_id,name,environment,light_exposure,rain_reach,"
+                        "wind_exposure,notes,created_at,updated_at"
+                    ),
+                    "workspace_id": f"eq.{workspace['id']}",
+                    "archived_at": "is.null",
+                    "order": "created_at.asc",
+                },
+            ),
+            client.get(
+                "/containers",
+                headers=headers,
+                params={
+                    "select": (
+                        "id,zone_id,name,container_type,approx_volume_l,drainage,"
+                        "self_watering,notes,created_at,updated_at"
+                    ),
+                    "workspace_id": f"eq.{workspace['id']}",
+                    "archived_at": "is.null",
+                    "order": "created_at.asc",
+                },
+            ),
+            client.get(
+                "/kytky",
+                headers=headers,
+                params={
+                    "select": "container_id",
+                    "workspace_id": f"eq.{workspace['id']}",
+                },
+            ),
         )
         raise_supabase_error(locations_response)
-
-        zones_response = await client.get(
-            "/zones",
-            headers=headers,
-            params={
-                "select": (
-                    "id,location_id,name,environment,light_exposure,rain_reach,"
-                    "wind_exposure,notes,created_at,updated_at"
-                ),
-                "workspace_id": f"eq.{workspace['id']}",
-                "archived_at": "is.null",
-                "order": "created_at.asc",
-            },
-        )
         raise_supabase_error(zones_response)
-
-        containers_response = await client.get(
-            "/containers",
-            headers=headers,
-            params={
-                "select": (
-                    "id,zone_id,name,container_type,approx_volume_l,drainage,"
-                    "self_watering,notes,created_at,updated_at"
-                ),
-                "workspace_id": f"eq.{workspace['id']}",
-                "archived_at": "is.null",
-                "order": "created_at.asc",
-            },
-        )
         raise_supabase_error(containers_response)
-
-        kytky_response = await client.get(
-            "/kytky",
-            headers=headers,
-            params={
-                "select": "container_id",
-                "workspace_id": f"eq.{workspace['id']}",
-            },
-        )
         raise_supabase_error(kytky_response)
 
     kytky_counts = Counter(

@@ -124,12 +124,17 @@ export function CareEventFields({
           ) : null}
         </label>
       ) : null}
-      <TextField
-        disabled={disabled}
-        label="Poznámka (nepovinné)"
-        onChange={(event) => onChange({ note: event.target.value || null })}
-        value={values.note ?? ""}
-      />
+      <label className="text-field">
+        <Text as="span" variant="label">
+          Poznámka (nepovinné)
+        </Text>
+        <textarea
+          disabled={disabled}
+          onChange={(event) => onChange({ note: event.target.value || null })}
+          rows={3}
+          value={values.note ?? ""}
+        />
+      </label>
     </>
   );
 }

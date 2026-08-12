@@ -1,6 +1,16 @@
 import { apiBaseUrl } from "./env";
 import { supabase } from "./supabase";
 
+const AUTHED_GET_CACHE_TTL_MS = 30_000;
+
+type AuthedGetCacheEntry = {
+  expiresAt: number;
+  promise?: Promise<unknown>;
+  value?: unknown;
+};
+
+const authedGetCache = new Map<string, AuthedGetCacheEntry>();
+
 async function parseApiError(response: Response): Promise<Error> {
   try {
     const body = (await response.json()) as { detail?: unknown };
@@ -52,8 +62,42 @@ export async function apiGet<T>(path: string, accessToken?: string): Promise<T> 
 }
 
 export async function apiGetAuthed<T>(path: string): Promise<T> {
-  const accessToken = await getAccessToken();
-  return apiGet<T>(path, accessToken);
+  const { accessToken, userId } = await getAuthContext();
+  const cacheKey = `${userId}:${path}`;
+  const cached = authedGetCache.get(cacheKey);
+  const now = Date.now();
+
+  if (cached && cached.expiresAt > now) {
+    if (cached.promise) {
+      return cached.promise as Promise<T>;
+    }
+
+    return cached.value as T;
+  }
+
+  const promise = apiGet<T>(path, accessToken)
+    .then((value) => {
+      authedGetCache.set(cacheKey, {
+        expiresAt: Date.now() + AUTHED_GET_CACHE_TTL_MS,
+        value,
+      });
+      return value;
+    })
+    .catch((error: unknown) => {
+      authedGetCache.delete(cacheKey);
+      throw error;
+    });
+
+  authedGetCache.set(cacheKey, {
+    expiresAt: now + AUTHED_GET_CACHE_TTL_MS,
+    promise,
+  });
+
+  return promise;
+}
+
+export function clearApiCache() {
+  authedGetCache.clear();
 }
 
 export async function apiPost<T>(
@@ -79,7 +123,9 @@ export async function apiPost<T>(
 
 export async function apiPostAuthed<T>(path: string, body: unknown): Promise<T> {
   const accessToken = await getAccessToken();
-  return apiPost<T>(path, body, accessToken);
+  const result = await apiPost<T>(path, body, accessToken);
+  clearApiCache();
+  return result;
 }
 
 export async function apiPatch<T>(
@@ -105,7 +151,9 @@ export async function apiPatch<T>(
 
 export async function apiPatchAuthed<T>(path: string, body: unknown): Promise<T> {
   const accessToken = await getAccessToken();
-  return apiPatch<T>(path, body, accessToken);
+  const result = await apiPatch<T>(path, body, accessToken);
+  clearApiCache();
+  return result;
 }
 
 export async function apiDelete(path: string, accessToken?: string): Promise<void> {
@@ -121,10 +169,15 @@ export async function apiDelete(path: string, accessToken?: string): Promise<voi
 
 export async function apiDeleteAuthed(path: string): Promise<void> {
   const accessToken = await getAccessToken();
-  return apiDelete(path, accessToken);
+  await apiDelete(path, accessToken);
+  clearApiCache();
 }
 
 async function getAccessToken(): Promise<string> {
+  return (await getAuthContext()).accessToken;
+}
+
+async function getAuthContext(): Promise<{ accessToken: string; userId: string }> {
   if (!supabase) {
     throw new Error("Supabase env není nastavené.");
   }
@@ -134,10 +187,14 @@ async function getAccessToken(): Promise<string> {
     throw new Error(error.message);
   }
 
-  const accessToken = data.session?.access_token;
+  const session = data.session;
+  const accessToken = session?.access_token;
   if (!accessToken) {
     throw new Error("Chybí Supabase access token.");
   }
 
-  return accessToken;
+  return {
+    accessToken,
+    userId: session.user.id,
+  };
 }

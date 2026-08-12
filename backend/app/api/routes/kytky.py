@@ -1,3 +1,4 @@
+from asyncio import gather
 from datetime import datetime
 from uuid import UUID
 
@@ -32,38 +33,32 @@ async def list_kytky(
     headers = supabase_user_headers(current_user.access_token)
 
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
-        response = await client.get(
-            "/kytky",
-            headers=headers,
-            params={
-                "select": _SELECT,
-                "workspace_id": f"eq.{workspace['id']}",
-                "order": "created_at.desc",
-            },
+        response, watering_response = await gather(
+            client.get(
+                "/kytky",
+                headers=headers,
+                params={
+                    "select": _SELECT,
+                    "workspace_id": f"eq.{workspace['id']}",
+                    "order": "created_at.desc",
+                },
+            ),
+            client.post(
+                "/rpc/latest_watering_by_container",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"p_workspace_id": str(workspace["id"])},
+            ),
         )
         raise_supabase_error(response)
-
-        watering_response = await client.get(
-            "/care_events",
-            headers=headers,
-            params={
-                "select": "container_id,occurred_at",
-                "workspace_id": f"eq.{workspace['id']}",
-                "event_type": "eq.watering",
-            },
-        )
         raise_supabase_error(watering_response)
 
     last_watered_by_container: dict[str, datetime] = {}
     for event in watering_response.json():
         container_id = event.get("container_id")
-        occurred_at = event.get("occurred_at")
+        occurred_at = event.get("last_watered_at")
         if container_id is None or occurred_at is None:
             continue
-        parsed = datetime.fromisoformat(occurred_at)
-        current = last_watered_by_container.get(container_id)
-        if current is None or parsed > current:
-            last_watered_by_container[container_id] = parsed
+        last_watered_by_container[container_id] = datetime.fromisoformat(occurred_at)
 
     return [
         _to_list_item(row, last_watered_by_container.get(row["container_id"]))

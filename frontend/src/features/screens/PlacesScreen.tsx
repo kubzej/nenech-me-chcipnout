@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ChevronRight, MapPin, Pencil, Plus } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ChoiceField } from '../../components/ui/ChoiceField';
+import { useConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { IconButton } from '../../components/ui/IconButton';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
@@ -65,6 +66,7 @@ export function PlacesScreen() {
     zoneId: string;
   } | null>(null);
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const loadPlaces = useCallback(
     async (options: { showLoading?: boolean } = {}) => {
@@ -162,7 +164,13 @@ export function PlacesScreen() {
       kytkyCount,
     );
 
-    if (!window.confirm(confirmMessage)) {
+    const confirmed = await confirm({
+      confirmLabel: 'Smazat',
+      message: confirmMessage.message,
+      title: confirmMessage.title,
+      tone: 'danger',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -260,7 +268,13 @@ export function PlacesScreen() {
       kytkyCount,
     );
 
-    if (!window.confirm(confirmMessage)) {
+    const confirmed = await confirm({
+      confirmLabel: 'Smazat',
+      message: confirmMessage.message,
+      title: confirmMessage.title,
+      tone: 'danger',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -359,7 +373,13 @@ export function PlacesScreen() {
       container.kytky_count,
     );
 
-    if (!window.confirm(confirmMessage)) {
+    const confirmed = await confirm({
+      confirmLabel: 'Smazat',
+      message: confirmMessage.message,
+      title: confirmMessage.title,
+      tone: 'danger',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -391,6 +411,8 @@ export function PlacesScreen() {
           {error}
         </Text>
       ) : null}
+
+      {confirmDialog}
 
       <Sheet
         isOpen={isCreateSheetOpen || editingLocation !== null}
@@ -747,13 +769,16 @@ function buildDeleteConfirm(
   action: string,
   nestedLabel: string | null,
   kytkyCount: number,
-): string {
+): { message?: string; title: string } {
   const suffix = nestedLabel ? ` a ${nestedLabel}` : '';
   const kytkyWarning =
     kytkyCount > 0
-      ? ` Smažou se i s ${formatKytkyCount(kytkyCount)} a jejich historií — natrvalo.`
+      ? `Smažou se i s ${formatKytkyCount(kytkyCount)} a jejich historií — natrvalo.`
       : '';
-  return `${action}${suffix}?${kytkyWarning}`;
+  return {
+    message: kytkyWarning || undefined,
+    title: `${action}${suffix}?`,
+  };
 }
 
 function formatContainerCount(count: number) {

@@ -38,6 +38,7 @@ import {
 import { PlantAvatar } from "../../components/avatar/PlantAvatar";
 import { Button } from "../../components/ui/Button";
 import { ChoiceField } from "../../components/ui/ChoiceField";
+import { useConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { IconButton } from "../../components/ui/IconButton";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
@@ -51,7 +52,7 @@ import {
   apiPatchAuthed,
   apiPostAuthed,
 } from "../../lib/api";
-import { uploadPlantPhoto } from "../../lib/photoUpload";
+import { deleteUploadedPlantPhoto, uploadPlantPhoto } from "../../lib/photoUpload";
 import type { CareEventCreateRequest, CareEventItem } from "../../types/care-event";
 import type { CareProfileItem } from "../../types/care-profile";
 import type { KytkaListItem } from "../../types/kytka";
@@ -95,6 +96,10 @@ export function KytkaDetailScreen({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<PlantPhotoItem | null>(null);
   const [isSettingAvatar, setIsSettingAvatar] = useState(false);
+  const [isStatusCheckOpen, setIsStatusCheckOpen] = useState(false);
+  const [selectedStatusSymptom, setSelectedStatusSymptom] =
+    useState<StatusSymptomId | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const loadTimeline = useCallback(async () => {
     setError(null);
@@ -151,6 +156,44 @@ export function KytkaDetailScreen({
     setEventPhotoFile(null);
   }
 
+  function openStatusCheckSheet() {
+    setSelectedStatusSymptom(null);
+    setIsStatusCheckOpen(true);
+  }
+
+  function resetStatusCheckSheet() {
+    setIsStatusCheckOpen(false);
+    setSelectedStatusSymptom(null);
+  }
+
+  function useStatusSymptom(symptom: StatusSymptom) {
+    setSelectedStatusSymptom(symptom.id);
+  }
+
+  function prepareStatusEvent() {
+    if (!selectedStatusSymptom) {
+      return;
+    }
+
+    const symptom = STATUS_SYMPTOMS.find(
+      (candidate) => candidate.id === selectedStatusSymptom,
+    );
+    if (!symptom) {
+      return;
+    }
+
+    setEditingEvent(null);
+    setEventPhotoFile(null);
+    setFormValues({
+      ...DEFAULT_CARE_EVENT_VALUES,
+      event_type: symptom.eventType,
+      condition: symptom.condition,
+      note: symptom.historyNote,
+    });
+    setIsStatusCheckOpen(false);
+    setIsEventSheetOpen(true);
+  }
+
   async function handleSubmitEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -168,11 +211,16 @@ export function KytkaDetailScreen({
 
       if (eventPhotoFile) {
         const uploaded = await uploadPlantPhoto(kytka.id, eventPhotoFile);
-        await apiPostAuthed("/api/plant-photos", {
-          kytka_id: kytka.id,
-          storage_path: uploaded.storagePath,
-          care_event_id: savedEvent.id,
-        });
+        try {
+          await apiPostAuthed("/api/plant-photos", {
+            kytka_id: kytka.id,
+            storage_path: uploaded.storagePath,
+            care_event_id: savedEvent.id,
+          });
+        } catch (photoError) {
+          await deleteUploadedPlantPhoto(uploaded.storagePath).catch(() => undefined);
+          throw photoError;
+        }
       }
 
       resetEventForm();
@@ -188,7 +236,12 @@ export function KytkaDetailScreen({
   }
 
   async function handleDeleteEvent(event: CareEventItem) {
-    if (!window.confirm(`Smazat tento záznam (${formatEventType(event.event_type)})?`)) {
+    const confirmed = await confirm({
+      confirmLabel: "Smazat",
+      title: `Smazat záznam (${formatEventType(event.event_type)})?`,
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -238,12 +291,17 @@ export function KytkaDetailScreen({
 
     try {
       const uploaded = await uploadPlantPhoto(kytka.id, standalonePhotoFile);
-      await apiPostAuthed("/api/plant-photos", {
-        kytka_id: kytka.id,
-        storage_path: uploaded.storagePath,
-        note: standaloneNote || null,
-        health_snapshot: standaloneHealth === "unknown" ? null : standaloneHealth,
-      });
+      try {
+        await apiPostAuthed("/api/plant-photos", {
+          kytka_id: kytka.id,
+          storage_path: uploaded.storagePath,
+          note: standaloneNote || null,
+          health_snapshot: standaloneHealth === "unknown" ? null : standaloneHealth,
+        });
+      } catch (metadataError) {
+        await deleteUploadedPlantPhoto(uploaded.storagePath).catch(() => undefined);
+        throw metadataError;
+      }
       resetStandalonePhoto();
       await loadTimeline();
       onDataChanged();
@@ -257,7 +315,12 @@ export function KytkaDetailScreen({
   }
 
   async function handleDeletePhoto(photo: PlantPhotoItem) {
-    if (!window.confirm("Smazat tuto fotku?")) {
+    const confirmed = await confirm({
+      confirmLabel: "Smazat",
+      title: "Smazat tuto fotku?",
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -303,9 +366,12 @@ export function KytkaDetailScreen({
 
   const profileLines = careProfile ? buildProfileSummaryLines(careProfile) : [];
   const timeline = buildTimeline(events, photos);
+  const selectedStatusSymptomData =
+    STATUS_SYMPTOMS.find((symptom) => symptom.id === selectedStatusSymptom) ?? null;
   const isAnySheetOpen =
     isEventSheetOpen ||
     editingEvent !== null ||
+    isStatusCheckOpen ||
     standalonePhotoFile !== null ||
     viewingPhoto !== null;
 
@@ -324,6 +390,8 @@ export function KytkaDetailScreen({
           </span>
         }
       />
+
+      {confirmDialog}
 
       <div className="kytka-detail__header-actions">
         <Button
@@ -370,6 +438,17 @@ export function KytkaDetailScreen({
           path={kytka.primary_photo_path}
           size="lg"
         />
+      </div>
+
+      <div className="kytka-detail__quick-actions">
+        <Button
+          icon={<Eye aria-hidden="true" size={18} />}
+          onClick={openStatusCheckSheet}
+          type="button"
+          variant="ghost"
+        >
+          Potřebuju pomoct
+        </Button>
       </div>
 
       {careProfile ? (
@@ -536,6 +615,65 @@ export function KytkaDetailScreen({
       </Sheet>
 
       <Sheet
+        isOpen={isStatusCheckOpen}
+        onClose={resetStatusCheckSheet}
+        title="Co pozoruješ?"
+      >
+        <div className="location-form">
+          <div className="status-check-flow">
+            <div className="status-check-grid">
+              {STATUS_SYMPTOMS.map((symptom) => {
+                const isSelected = selectedStatusSymptom === symptom.id;
+
+                return (
+                  <button
+                    aria-pressed={isSelected}
+                    className={
+                      isSelected
+                        ? "status-check-grid__option is-selected"
+                        : "status-check-grid__option"
+                    }
+                    key={symptom.id}
+                    onClick={() => useStatusSymptom(symptom)}
+                    type="button"
+                  >
+                    {symptom.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedStatusSymptom ? (
+              <div className="status-check-summary">
+                <Text as="p" variant="label">
+                  První krok
+                </Text>
+                <Text as="p" variant="body">
+                  {selectedStatusSymptomData?.firstStep}
+                </Text>
+                <Text as="p" tone="muted" variant="caption">
+                  Tohle je jen první krok. Pokud chceš změnit stav kytky a
+                  uložit to do historie, připravím ti běžný záznam.
+                </Text>
+                {selectedStatusSymptomData ? (
+                  <Text as="p" tone="muted" variant="caption">
+                    {statusCheckFollowupText(selectedStatusSymptomData)}
+                  </Text>
+                ) : null}
+              </div>
+            ) : null}
+            <Button
+              disabled={!selectedStatusSymptom}
+              onClick={prepareStatusEvent}
+              type="button"
+            >
+              Připravit záznam
+            </Button>
+          </div>
+        </div>
+      </Sheet>
+
+      <Sheet
         isOpen={standalonePhotoFile !== null}
         onClose={resetStandalonePhoto}
         title="Nová fotka"
@@ -606,6 +744,141 @@ export function KytkaDetailScreen({
       ) : null}
     </section>
   );
+}
+
+type StatusSymptom = {
+  condition: NonNullable<CareEventCreateRequest["condition"]>;
+  eventType: CareEventCreateRequest["event_type"];
+  firstStep: string;
+  historyNote: string;
+  id: StatusSymptomId;
+  label: string;
+};
+
+type StatusSymptomId =
+  | "brown_tips"
+  | "damaged"
+  | "leaf_drop"
+  | "pests"
+  | "rot"
+  | "spots"
+  | "sunburn"
+  | "unknown"
+  | "weak_growth"
+  | "wilting"
+  | "yellowing";
+
+const STATUS_SYMPTOMS = [
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep: "Zkontroluj substrát. Suchý = zalít, mokrý = nezalévat.",
+    historyNote:
+      "Symptom: vadnou/svěšené listy. Kytka je daná pod dohled kvůli možné chybě v zálivce.",
+    id: "wilting",
+    label: "Vadnou / svěšené",
+  },
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep: "Zkontroluj přelití a stojící vodu.",
+    historyNote:
+      "Symptom: žloutnou listy. Kytka je daná pod dohled kvůli možné zálivce nebo stresu.",
+    id: "yellowing",
+    label: "Žloutnou listy",
+  },
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep:
+      "Dnes nehnoj. Zkontroluj horko, suchý vzduch nebo nepravidelnou zálivku.",
+    historyNote:
+      "Symptom: hnědé špičky/suché okraje. Kytka je daná pod dohled kvůli možnému stresu.",
+    id: "brown_tips",
+    label: "Hnědé špičky",
+  },
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep: "Neros listy a sleduj, jestli se fleky šíří.",
+    historyNote:
+      "Symptom: fleky na listech. Kytka je daná pod dohled, sledovat jestli se fleky šíří.",
+    id: "spots",
+    label: "Fleky na listech",
+  },
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep: "Zkontroluj spodky listů a okolí kytky.",
+    historyNote:
+      "Symptom: poškozené/okousané listy. Kytka je daná pod dohled kvůli možnému poškození nebo škůdcům.",
+    id: "damaged",
+    label: "Poškozené / okousané",
+  },
+  {
+    condition: "sick",
+    eventType: "pest_observation",
+    firstStep: "Dej ji bokem a zkontroluj spodky listů.",
+    historyNote:
+      "Symptom: podezření na škůdce. Kytka je označená jako nemocná.",
+    id: "pests",
+    label: "Škůdci / lepí / pavučinky",
+  },
+  {
+    condition: "sick",
+    eventType: "checkin",
+    firstStep: "Přestaň zalévat a zkontroluj substrát.",
+    historyNote:
+      "Symptom: měkké/hnijící části. Kytka je označená jako nemocná.",
+    id: "rot",
+    label: "Měkké / hnijící části",
+  },
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep: "Zkontroluj průvan/chlad a poslední zálivku.",
+    historyNote:
+      "Symptom: opadávají listy. Kytka je daná pod dohled kvůli možnému stresu.",
+    id: "leaf_drop",
+    label: "Opadávají listy",
+  },
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep: "Zkontroluj světlo. Tohle není akutní.",
+    historyNote:
+      "Symptom: nekvete nebo slabě roste. Kytka je daná pod dohled, nejde o akutní stav.",
+    id: "weak_growth",
+    label: "Nekvete / slabý růst",
+  },
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep: "Dej ji mimo ostré polední slunce.",
+    historyNote:
+      "Symptom: spálené/suché fleky od slunce. Kytka je daná pod dohled.",
+    id: "sunburn",
+    label: "Spálené sluncem",
+  },
+  {
+    condition: "monitoring",
+    eventType: "checkin",
+    firstStep: "Dej ji pod dohled a za pár dní porovnej stav.",
+    historyNote:
+      "Symptom: stav vypadá horší, příčina není jasná. Kytka je daná pod dohled.",
+    id: "unknown",
+    label: "Nevím, vypadá hůř",
+  },
+] as const satisfies readonly StatusSymptom[];
+
+function statusCheckFollowupText(symptom: StatusSymptom) {
+  if (symptom.eventType === "pest_observation") {
+    return "Po uložení se bude v Dnes hlídat další kontrola škůdců podle profilu.";
+  }
+  if (symptom.condition === "sick") {
+    return "Po uložení dostane vyšší prioritu a appka ji bude hlídat častěji.";
+  }
+  return "Po uložení ji appka dá pod dohled a bude ji kontrolovat častěji.";
 }
 
 type TimelineEntry =
@@ -835,9 +1108,12 @@ function formatEventDateTime(iso: string) {
 function formatEventDetail(event: CareEventItem) {
   const parts: string[] = [];
   if (event.condition && event.condition !== "unknown") {
-    parts.push(
-      findLabel([...PLANT_STATUS_OPTIONS, ...PHOTO_HEALTH_OPTIONS], event.condition),
-    );
+    const label = findLabel([...PLANT_STATUS_OPTIONS, ...PHOTO_HEALTH_OPTIONS], event.condition);
+    if (event.event_type === "checkin" || event.event_type === "pest_observation") {
+      parts.push(`Nastaven stav: ${label}`);
+    } else {
+      parts.push(label);
+    }
   }
   if (event.method) {
     parts.push(event.method);

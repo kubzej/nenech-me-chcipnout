@@ -24,6 +24,10 @@ export type CareProfileItem = {
   maintenance_interval_days: number | null;
   maintenance_notes: string | null;
   risk_notes: string | null;
+  survival_watering_hint: string | null;
+  survival_heat_hint: string | null;
+  survival_frost_hint: string | null;
+  survival_fertilizing_hint: string | null;
   created_at: string;
   updated_at: string;
   kytky_count: number;
@@ -64,4 +68,8 @@ export type CareProfileCreateRequest = {
   maintenance_interval_days?: number | null;
   maintenance_notes?: string | null;
   risk_notes?: string | null;
+  survival_watering_hint?: string | null;
+  survival_heat_hint?: string | null;
+  survival_frost_hint?: string | null;
+  survival_fertilizing_hint?: string | null;
 };

@@ -70,6 +70,9 @@ export type CareTaskCompleteRequest = {
   method?: string | null;
   condition?: string | null;
   note?: string | null;
+  photo_storage_path?: string | null;
+  photo_note?: string | null;
+  photo_health_snapshot?: string | null;
 };
 
 export type CareTaskSkipRequest = {
@@ -79,4 +82,19 @@ export type CareTaskSkipRequest = {
 export type CareTaskCompleteResponse = {
   task: CareTaskItem;
   event_id: string;
+  photo_id: string | null;
+};
+
+export type CareTaskCompleteGroupRequest = CareTaskCompleteRequest & {
+  task_ids: string[];
+};
+
+export type CareTaskCompleteGroupItem = {
+  task: CareTaskItem;
+  event_id: string;
+  photo_id: string | null;
+};
+
+export type CareTaskCompleteGroupResponse = {
+  items: CareTaskCompleteGroupItem[];
 };

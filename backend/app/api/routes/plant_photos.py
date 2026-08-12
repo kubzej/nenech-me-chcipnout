@@ -10,6 +10,7 @@ from app.core.supabase_rest import (
     supabase_user_headers,
 )
 from app.schemas.plant_photos import PlantPhotoCreateRequest, PlantPhotoItem
+from app.services.storage import delete_storage_object
 from app.services.workspaces import get_first_workspace
 
 router = APIRouter(prefix="/api", tags=["plant-photos"])
@@ -31,6 +32,15 @@ async def create_plant_photo(
 
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
         kytka = await _require_kytka(client, headers, payload.kytka_id, workspace["id"])
+        _validate_storage_path(payload.storage_path, workspace["id"], payload.kytka_id)
+        if payload.care_event_id is not None:
+            await _require_care_event(
+                client,
+                headers,
+                payload.care_event_id,
+                payload.kytka_id,
+                workspace["id"],
+            )
 
         insert_payload = payload.model_dump(mode="json")
         insert_payload["workspace_id"] = str(workspace["id"])
@@ -82,6 +92,12 @@ async def delete_plant_photo(
     headers = supabase_user_headers(current_user.access_token)
 
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
+        photo = await _require_photo(client, headers, photo_id, workspace["id"])
+        await delete_storage_object(
+            current_user.access_token,
+            str(photo["storage_bucket"]),
+            str(photo["storage_path"]),
+        )
         response = await client.delete(
             "/plant_photos",
             headers=headers,
@@ -138,6 +154,80 @@ async def _require_kytka(
     if not rows:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Kytka not found"
+        )
+
+    return rows[0]
+
+
+def _validate_storage_path(
+    storage_path: str,
+    workspace_id: object,
+    kytka_id: UUID,
+) -> None:
+    parts = storage_path.split("/")
+    if (
+        len(parts) < 3
+        or parts[0] != str(workspace_id)
+        or parts[1] != str(kytka_id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Photo storage path does not match the workspace and Kytka",
+        )
+
+
+async def _require_care_event(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    care_event_id: UUID,
+    kytka_id: UUID,
+    workspace_id: object,
+) -> dict[str, object]:
+    response = await client.get(
+        "/care_events",
+        headers=headers,
+        params={
+            "select": "id",
+            "id": f"eq.{care_event_id}",
+            "kytka_id": f"eq.{kytka_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "limit": "1",
+        },
+    )
+    raise_supabase_error(response)
+
+    rows = response.json()
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Care event does not belong to this Kytka",
+        )
+
+    return rows[0]
+
+
+async def _require_photo(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    photo_id: UUID,
+    workspace_id: object,
+) -> dict[str, object]:
+    response = await client.get(
+        "/plant_photos",
+        headers=headers,
+        params={
+            "select": "id,storage_bucket,storage_path",
+            "id": f"eq.{photo_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "limit": "1",
+        },
+    )
+    raise_supabase_error(response)
+
+    rows = response.json()
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
 
     return rows[0]

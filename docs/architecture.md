@@ -42,23 +42,27 @@ Workspace
 ```
 
 - `Kytka` optionally links to a `CareProfile` (species-level template: watering
-  interval, light/temperature sensitivity, feeding, pest-check cadence).
+  interval, light/temperature sensitivity, feeding, pest-check/photo cadence,
+  and short survival hints for generated task cards).
 - `CareEvent` targets either a `Kytka` or a `Container` — watering/fertilizing
   are container-scoped (shared substrate), everything else is Kytka-scoped.
-- `CareTask` is always Kytka-scoped, generated daily; completing one writes a
-  `CareEvent` as a side effect (routes reuse `create_care_event` directly
-  rather than duplicating the write logic).
+- `CareTask` is always Kytka-scoped, generated daily; completing one or more
+  tasks calls the `complete_care_tasks` Postgres RPC so the event write, task
+  status update, and optional photo metadata insert happen atomically.
 - `PlantPhoto` attaches optionally to a `CareEvent`; the first photo ever
-  added for a Kytka becomes its avatar automatically.
+  added for a Kytka becomes its avatar automatically. Browser uploads the
+  binary to Storage first; the backend validates the storage path before
+  writing metadata and removes Storage objects when photos are deleted.
 
 ## Daily plan generation
 
 `backend/app/services/daily_plan.py::refresh_daily_plan` is the recommendation
-engine — the single function that decides what needs attention today. It is
-callable both on-demand (opening the Dnes screen calls it with the viewing
-user's own headers) and from the cron job (service-role headers, shared
-across a whole workspace). Idempotent by design: re-running it the same day
-never duplicates or resurrects an already-acted-on task
+engine — the function that decides what needs attention today. A separate
+`read_daily_plan` path returns the already-generated snapshot without
+rollover/weather/task-generation side effects, so normal reloads after actions
+are cheap. Refresh is still callable on-demand and from the cron job
+(service-role headers, shared across a whole workspace). Idempotent by design:
+re-running it the same day never duplicates or resurrects an already-acted-on task
 (`generated_key` unique constraint + an explicit "don't touch non-pending
 tasks" guard in `_upsert_task`).
 
@@ -66,9 +70,28 @@ Inputs it combines: care profile interval, days since last event, Kytka
 status (dormant/sick/monitoring multipliers), live weather forecast
 (Open-Meteo, snapshotted to `weather_daily_snapshots` on every run), zone
 `rain_reach` and `environment` (indoor Kytky never get outdoor
-frost/heat-protection tasks), and upcoming absences (pulls a watering task
+frost/heat-protection tasks), heat/rain forecast adjustments, and upcoming
+absences (pulls a watering task
 forward if it would otherwise fall inside a trip, rather than trying to
 "water more").
+
+Generated task priorities are intentionally simple: normal care is `normal`,
+photo/maintenance reminders are `low`, sick plants, absences, and weather
+protection are `high`; `critical` exists in the schema but is not a routine
+generation output yet. The Today screen then applies its own presentation
+order: priority first, Kytka/container name second, task type only as a
+tie-breaker. It does not merge every plant's tasks into one card.
+
+Sick/monitoring follow-up is modeled as normal `checkin` tasks with shorter
+cadence. The UI can ask `better / same / worse`, but persistence still uses
+the existing `condition = ok|monitoring|sick` status-setting mechanism plus a
+human-readable note; there is no separate recovery table or photo-analysis
+pipeline. `photo_observation` remains an archival photo reminder.
+
+`/api/kytky` reads list data and the latest watering per container in
+parallel. Latest watering comes from the `latest_watering_by_container` RPC,
+so the API does not fetch the whole watering history just to render list
+buttons like "Zalito dnes".
 
 ## Push notifications
 

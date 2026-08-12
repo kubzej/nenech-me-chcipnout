@@ -5,6 +5,7 @@ import {
   DEFAULT_CARE_PROFILE_VALUES,
 } from "../../components/care-profile/CareProfileFields";
 import { Button } from "../../components/ui/Button";
+import { useConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { IconButton } from "../../components/ui/IconButton";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
@@ -39,6 +40,7 @@ export function CareProfilesSection({ onBack }: CareProfilesSectionProps) {
   const [formValues, setFormValues] = useState<CareProfileCreateRequest>(
     DEFAULT_CARE_PROFILE_VALUES,
   );
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const loadProfiles = useCallback(async (options: { showLoading?: boolean } = {}) => {
     setError(null);
@@ -106,12 +108,16 @@ export function CareProfilesSection({ onBack }: CareProfilesSectionProps) {
   }
 
   async function handleDelete(profile: CareProfileItem) {
-    const confirmMessage =
-      profile.kytky_count > 0
-        ? `Smazat profil „${profile.name}"? Používá ho ${formatKytkyCount(profile.kytky_count)} — přijdou o přiřazený profil.`
-        : `Smazat profil „${profile.name}"?`;
-
-    if (!window.confirm(confirmMessage)) {
+    const confirmed = await confirm({
+      confirmLabel: "Smazat",
+      message:
+        profile.kytky_count > 0
+          ? `Používá ho ${formatKytkyCount(profile.kytky_count)}. Kytky přijdou o přiřazený profil.`
+          : undefined,
+      title: `Smazat profil „${profile.name}"?`,
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -156,6 +162,8 @@ export function CareProfilesSection({ onBack }: CareProfilesSectionProps) {
           {error}
         </Text>
       ) : null}
+
+      {confirmDialog}
 
       {!isLoading && !error && profiles.length === 0 ? (
         <EmptyState

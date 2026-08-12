@@ -31,6 +31,10 @@ class CareProfileItem(BaseModel):
     maintenance_interval_days: int | None
     maintenance_notes: str | None
     risk_notes: str | None
+    survival_watering_hint: str | None
+    survival_heat_hint: str | None
+    survival_frost_hint: str | None
+    survival_fertilizing_hint: str | None
     created_at: datetime
     updated_at: datetime
     kytky_count: int
@@ -64,6 +68,10 @@ class CareProfileCreateRequest(BaseModel):
     maintenance_interval_days: int | None = Field(default=None, gt=0)
     maintenance_notes: str | None = None
     risk_notes: str | None = None
+    survival_watering_hint: str | None = Field(default=None, max_length=120)
+    survival_heat_hint: str | None = Field(default=None, max_length=120)
+    survival_frost_hint: str | None = Field(default=None, max_length=120)
+    survival_fertilizing_hint: str | None = Field(default=None, max_length=120)
 
     @field_validator("name")
     @classmethod
@@ -75,7 +83,14 @@ class CareProfileCreateRequest(BaseModel):
         return stripped
 
     @field_validator(
-        "scientific_name", "watering_method", "maintenance_notes", "risk_notes"
+        "scientific_name",
+        "watering_method",
+        "maintenance_notes",
+        "risk_notes",
+        "survival_watering_hint",
+        "survival_heat_hint",
+        "survival_frost_hint",
+        "survival_fertilizing_hint",
     )
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:

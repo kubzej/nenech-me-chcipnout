@@ -4,6 +4,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { AuthenticatedApp } from "./features/app/AuthenticatedApp";
 import { WelcomeScreen } from "./features/welcome/WelcomeScreen";
 import { hasSupabaseConfig } from "./lib/env";
+import { clearApiCache } from "./lib/api";
 import { supabase } from "./lib/supabase";
 
 export function App() {
@@ -73,6 +74,7 @@ export function App() {
       return;
     }
 
+    clearApiCache();
     setSession(data.session);
     setShowIntro(true);
     setPassword("");
@@ -80,6 +82,7 @@ export function App() {
   }
 
   async function handleLogout() {
+    clearApiCache();
     if (supabase) {
       await supabase.auth.signOut();
     }

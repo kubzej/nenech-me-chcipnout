@@ -4,6 +4,7 @@ import { KytkaDetailScreen } from "./KytkaDetailScreen";
 import { PlantAvatar } from "../../components/avatar/PlantAvatar";
 import { Button } from "../../components/ui/Button";
 import { ChoiceField } from "../../components/ui/ChoiceField";
+import { useConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { PickerField } from "../../components/ui/PickerField";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
@@ -42,6 +43,7 @@ export function PlantsScreen() {
   const [selectedKytkaId, setSelectedKytkaId] = useState<string | null>(null);
   const [wateringId, setWateringId] = useState<string | null>(null);
   const [justWateredId, setJustWateredId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const loadData = useCallback(async (options: { showLoading?: boolean } = {}) => {
     setError(null);
@@ -137,11 +139,13 @@ export function PlantsScreen() {
   }
 
   async function handleDeleteKytka(kytka: KytkaListItem) {
-    if (
-      !window.confirm(
-        `Trvale smazat kytku „${kytka.display_name}"? Tohle nejde vzít zpět.`,
-      )
-    ) {
+    const confirmed = await confirm({
+      confirmLabel: "Smazat",
+      message: "Tohle nejde vzít zpět.",
+      title: `Trvale smazat kytku „${kytka.display_name}"?`,
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -283,6 +287,7 @@ export function PlantsScreen() {
 
     return (
       <>
+        {confirmDialog}
         {kytkaEditSheet}
         <KytkaDetailScreen
           careProfile={matchingProfile}
@@ -309,6 +314,7 @@ export function PlantsScreen() {
         </Text>
       ) : null}
 
+      {confirmDialog}
       {kytkaEditSheet}
 
       {!isLoading && !error && kytky.length === 0 ? (

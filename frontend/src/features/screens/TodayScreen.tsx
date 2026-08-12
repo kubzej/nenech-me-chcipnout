@@ -17,8 +17,10 @@ import {
   CareEventFields,
   DEFAULT_CARE_EVENT_VALUES,
 } from "../../components/care-event/CareEventFields";
+import sergeantPhoto from "../../assets/brand/plant-drill-sergeant-cutout.png";
 import { PlantAvatar } from "../../components/avatar/PlantAvatar";
 import { Button } from "../../components/ui/Button";
+import { ChoiceField } from "../../components/ui/ChoiceField";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { IconButton } from "../../components/ui/IconButton";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
@@ -26,11 +28,13 @@ import { Sheet } from "../../components/ui/Sheet";
 import { SkeletonCard } from "../../components/ui/SkeletonCard";
 import { Text } from "../../components/ui/Text";
 import { apiGetAuthed, apiPostAuthed } from "../../lib/api";
-import { uploadPlantPhoto } from "../../lib/photoUpload";
-import type { CareEventCreateRequest } from "../../types/care-event";
+import { deleteUploadedPlantPhoto, uploadPlantPhoto } from "../../lib/photoUpload";
+import { DAILY_SERGEANT_MESSAGES } from "../today/dailySergeantMessages";
+import type { CareEventCondition, CareEventCreateRequest } from "../../types/care-event";
 import type {
   ActiveAbsenceItem,
-  CareTaskCompleteResponse,
+  CareTaskCompleteGroupResponse,
+  CareTaskCompleteRequest,
   CareTaskItem,
   DailyPlanResponse,
   LightMismatchItem,
@@ -40,6 +44,7 @@ import type { KytkaListItem } from "../../types/kytka";
 import "./screen.css";
 
 type QuickTaskType = "watering" | "fertilizing";
+type RecoveryTrend = "better" | "same" | "worse";
 
 type TaskGroup =
   | {
@@ -86,7 +91,7 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   fertilizing: "Hnojení",
   checkin: "Kontrola",
   pest_followup: "Kontrola škůdců",
-  photo_observation: "Foto check-in",
+  photo_observation: "Fotka do historie",
   weather_protection: "Ochrana před počasím",
   maintenance: "Údržba",
 };
@@ -106,6 +111,28 @@ const PRIORITY_RANK: Record<string, number> = {
   high: 1,
   normal: 2,
   low: 3,
+};
+
+const TASK_TYPE_RANK: Record<string, number> = {
+  weather_protection: 0,
+  pest_followup: 1,
+  checkin: 2,
+  watering: 3,
+  fertilizing: 4,
+  maintenance: 5,
+  photo_observation: 6,
+};
+
+const RECOVERY_TREND_OPTIONS = [
+  { label: "Lepší", value: "better" },
+  { label: "Stejná", value: "same" },
+  { label: "Horší", value: "worse" },
+] as const;
+
+const RECOVERY_TREND_NOTE: Record<RecoveryTrend, string> = {
+  better: "Oproti minule: lepší.",
+  same: "Oproti minule: stejná.",
+  worse: "Oproti minule: horší.",
 };
 
 export function TodayScreen() {
@@ -129,16 +156,23 @@ export function TodayScreen() {
   );
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [pendingPhotoTaskId, setPendingPhotoTaskId] = useState<string | null>(null);
+  const [eventPhotoFile, setEventPhotoFile] = useState<File | null>(null);
+  const [recoveryTrend, setRecoveryTrend] = useState<RecoveryTrend>("same");
+  const [dailySergeantMessage] = useState(() => getRandomSergeantMessage());
+  const [isSergeantMessageDismissed, setIsSergeantMessageDismissed] = useState(false);
 
-  const loadToday = useCallback(async (options: { showLoading?: boolean } = {}) => {
+  const loadToday = useCallback(async (options: { refresh?: boolean; showLoading?: boolean } = {}) => {
     setError(null);
     if (options.showLoading ?? true) {
       setIsLoading(true);
     }
 
     try {
+      const refresh = options.refresh ?? true;
       const [plan, kytkyData] = await Promise.all([
-        apiGetAuthed<DailyPlanResponse>("/api/care-tasks/today"),
+        refresh
+          ? apiPostAuthed<DailyPlanResponse>("/api/care-tasks/today/refresh", {})
+          : apiGetAuthed<DailyPlanResponse>("/api/care-tasks/today"),
         apiGetAuthed<KytkaListItem[]>("/api/kytky"),
       ]);
       setTasks(plan.tasks);
@@ -172,6 +206,11 @@ export function TodayScreen() {
   const visibleProfileLess = profileLessKytky.filter(
     (kytka) => !dismissedProfileLessIds.has(kytka.id),
   );
+  const activeTaskKytka =
+    activeTask?.kytka_id ? kytkaById.get(activeTask.kytka_id) : null;
+  const isRecoveryCheckin =
+    activeTask?.task_type === "checkin" && isUnderCare(activeTaskKytka?.status);
+  const showDailySergeantMessage = !isSergeantMessageDismissed;
 
   function handleDismissProfileLess() {
     setDismissedProfileLessIds((current) => {
@@ -184,16 +223,30 @@ export function TodayScreen() {
     });
   }
 
+  function handleDismissSergeantMessage() {
+    setIsSergeantMessageDismissed(true);
+  }
+
   function openDetailedSheet(task: CareTaskItem) {
+    const taskKytka = task.kytka_id ? kytkaById.get(task.kytka_id) : null;
+    const defaultCondition = isConditionTask(task.task_type)
+      ? normalizePlantStatus(taskKytka?.status)
+      : null;
+
     setActiveTask(task);
+    setEventPhotoFile(null);
+    setRecoveryTrend("same");
     setFormValues({
       ...DEFAULT_CARE_EVENT_VALUES,
       event_type: DETAILED_TASK_EVENT_DEFAULTS[task.task_type] ?? "checkin",
+      condition: defaultCondition,
     });
   }
 
   function resetDetailedSheet() {
     setActiveTask(null);
+    setEventPhotoFile(null);
+    setRecoveryTrend("same");
     setFormValues(DEFAULT_CARE_EVENT_VALUES);
   }
 
@@ -206,12 +259,37 @@ export function TodayScreen() {
     setError(null);
     setIsSaving(true);
 
+    let uploadedPath: string | null = null;
+
     try {
-      const { occurred_at: _occurredAt, ...completePayload } = formValues;
-      await apiPostAuthed(`/api/care-tasks/${activeTask.id}/complete`, completePayload);
+      const submitValues = isRecoveryCheckin
+        ? {
+            ...formValues,
+            event_type: "checkin" as const,
+            condition: recoveryTrendToCondition(
+              recoveryTrend,
+              activeTaskKytka?.status,
+            ),
+            note: buildRecoveryNote(recoveryTrend, formValues.note),
+          }
+        : formValues;
+      const { occurred_at: _occurredAt, ...completePayload } = submitValues;
+      const taskPayload: CareTaskCompleteRequest = completePayload;
+
+      if (eventPhotoFile && activeTask.kytka_id) {
+        const uploaded = await uploadPlantPhoto(activeTask.kytka_id, eventPhotoFile);
+        uploadedPath = uploaded.storagePath;
+        taskPayload.photo_storage_path = uploaded.storagePath;
+      }
+
+      await apiPostAuthed(`/api/care-tasks/${activeTask.id}/complete`, taskPayload);
+      uploadedPath = null;
       resetDetailedSheet();
-      await loadToday({ showLoading: false });
+      await loadToday({ refresh: false, showLoading: false });
     } catch (saveError) {
+      if (uploadedPath) {
+        await deleteUploadedPlantPhoto(uploadedPath).catch(() => undefined);
+      }
       setError(
         saveError instanceof Error ? saveError.message : "Úkol se nepodařilo uložit.",
       );
@@ -225,13 +303,11 @@ export function TodayScreen() {
     setBusyKey(group.key);
 
     try {
-      for (const task of group.tasks) {
-        await apiPostAuthed(`/api/care-tasks/${task.id}/complete`, {
-          event_type: group.taskType,
-          amount_ml: task.recommended_amount_ml,
-        });
-      }
-      await loadToday({ showLoading: false });
+      await apiPostAuthed<CareTaskCompleteGroupResponse>("/api/care-tasks/complete", {
+        event_type: group.taskType,
+        task_ids: group.tasks.map((task) => task.id),
+      });
+      await loadToday({ refresh: false, showLoading: false });
     } catch (completeError) {
       setError(
         completeError instanceof Error ? completeError.message : "Úkol se nepodařilo uložit.",
@@ -249,15 +325,13 @@ export function TodayScreen() {
     setBulkBusy(taskType);
 
     try {
-      for (const group of groupsToComplete) {
-        for (const task of group.tasks) {
-          await apiPostAuthed(`/api/care-tasks/${task.id}/complete`, {
-            event_type: taskType,
-            amount_ml: task.recommended_amount_ml,
-          });
-        }
-      }
-      await loadToday({ showLoading: false });
+      await apiPostAuthed<CareTaskCompleteGroupResponse>("/api/care-tasks/complete", {
+        event_type: taskType,
+        task_ids: groupsToComplete.flatMap((group) =>
+          group.tasks.map((task) => task.id),
+        ),
+      });
+      await loadToday({ refresh: false, showLoading: false });
     } catch (completeError) {
       setError(
         completeError instanceof Error ? completeError.message : "Úkol se nepodařilo uložit.",
@@ -285,20 +359,22 @@ export function TodayScreen() {
 
     setError(null);
     setBusyKey(task.id);
+    let uploadedPath: string | null = null;
 
     try {
       const uploaded = await uploadPlantPhoto(task.kytka_id, file);
-      const response = await apiPostAuthed<CareTaskCompleteResponse>(
-        `/api/care-tasks/${task.id}/complete`,
-        { event_type: "photo_observation" },
-      );
-      await apiPostAuthed("/api/plant-photos", {
-        kytka_id: task.kytka_id,
-        storage_path: uploaded.storagePath,
-        care_event_id: response.event_id,
+      uploadedPath = uploaded.storagePath;
+      await apiPostAuthed<CareTaskCompleteGroupResponse>("/api/care-tasks/complete", {
+        event_type: "photo_observation",
+        photo_storage_path: uploaded.storagePath,
+        task_ids: [task.id],
       });
-      await loadToday({ showLoading: false });
+      uploadedPath = null;
+      await loadToday({ refresh: false, showLoading: false });
     } catch (photoError) {
+      if (uploadedPath) {
+        await deleteUploadedPlantPhoto(uploadedPath).catch(() => undefined);
+      }
       setError(
         photoError instanceof Error ? photoError.message : "Fotku se nepodařilo uložit.",
       );
@@ -315,7 +391,7 @@ export function TodayScreen() {
       for (const taskId of taskIds) {
         await apiPostAuthed(`/api/care-tasks/${taskId}/skip`, {});
       }
-      await loadToday({ showLoading: false });
+      await loadToday({ refresh: false, showLoading: false });
     } catch (skipError) {
       setError(
         skipError instanceof Error ? skipError.message : "Úkol se nepodařilo přeskočit.",
@@ -329,6 +405,29 @@ export function TodayScreen() {
   return (
     <section className="screen screen--stack" aria-label="Dnes">
       <ScreenHeader title="Dnes" subtitle="Co dnes zase zanedbáváš" />
+
+      {showDailySergeantMessage ? (
+        <div className="today-sergeant-message">
+          <img
+            alt=""
+            aria-hidden="true"
+            className="today-sergeant-message__face"
+            src={sergeantPhoto}
+          />
+          <div className="today-sergeant-message__body">
+            <Text as="p" variant="body">
+              &bdquo;{dailySergeantMessage}&ldquo;
+            </Text>
+          </div>
+          <IconButton
+            icon={<X aria-hidden="true" size={16} />}
+            label="Zavřít seržantovu message"
+            onClick={handleDismissSergeantMessage}
+            size="sm"
+            variant="ghost"
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <Text as="p" variant="body" tone="danger" className="text-banner">
@@ -448,18 +547,30 @@ export function TodayScreen() {
       >
         <div className="location-form">
           <form onSubmit={handleSubmitDetailed}>
-            <CareEventFields
-              disabled={isSaving}
-              kytkaStatus={
-                activeTask?.kytka_id
-                  ? kytkaById.get(activeTask.kytka_id)?.status
-                  : undefined
-              }
-              onChange={(patch) =>
-                setFormValues((current) => ({ ...current, ...patch }))
-              }
-              values={formValues}
-            />
+            {isRecoveryCheckin ? (
+              <RecoveryCheckinFields
+                disabled={isSaving}
+                note={formValues.note ?? ""}
+                onNoteChange={(note) =>
+                  setFormValues((current) => ({ ...current, note }))
+                }
+                onPhotoChange={setEventPhotoFile}
+                onTrendChange={setRecoveryTrend}
+                photoFile={eventPhotoFile}
+                trend={recoveryTrend}
+              />
+            ) : (
+              <CareEventFields
+                disabled={isSaving}
+                kytkaStatus={activeTaskKytka?.status}
+                onChange={(patch) =>
+                  setFormValues((current) => ({ ...current, ...patch }))
+                }
+                onPhotoChange={setEventPhotoFile}
+                photoFile={eventPhotoFile}
+                values={formValues}
+              />
+            )}
             <Button disabled={isSaving} type="submit">
               {isSaving ? "Ukládám..." : "Uložit"}
             </Button>
@@ -508,6 +619,8 @@ function TaskCard({
       (task) => task.priority === "high" || task.priority === "critical",
     );
     const explanation = group.tasks[0]?.explanation ?? null;
+    const instructions =
+      group.tasks.find((task) => task.instructions)?.instructions ?? null;
     const taskIds = group.tasks.map((task) => task.id);
 
     return (
@@ -532,6 +645,16 @@ function TaskCard({
               {explanation ? (
                 <Text as="p" variant="body" tone="muted">
                   {explanation}
+                </Text>
+              ) : null}
+              {instructions ? (
+                <Text
+                  as="p"
+                  variant="caption"
+                  tone={isHighPriority ? "danger" : "muted"}
+                  className="today-task__instructions"
+                >
+                  {instructions}
                 </Text>
               ) : null}
               {names.length > 1 ? (
@@ -587,6 +710,16 @@ function TaskCard({
             <Text as="p" variant="body" tone="muted">
               {task.explanation ?? TASK_TYPE_LABELS[task.task_type]}
             </Text>
+            {task.instructions ? (
+              <Text
+                as="p"
+                variant="caption"
+                tone={isHighPriority ? "danger" : "muted"}
+                className="today-task__instructions"
+              >
+                {task.instructions}
+              </Text>
+            ) : null}
           </div>
         </div>
         <div className="kytka-detail__header-actions-group">
@@ -612,6 +745,65 @@ function TaskCard({
         )}
       </div>
     </article>
+  );
+}
+
+type RecoveryCheckinFieldsProps = {
+  disabled: boolean;
+  note: string;
+  onNoteChange: (note: string | null) => void;
+  onPhotoChange: (file: File | null) => void;
+  onTrendChange: (trend: RecoveryTrend) => void;
+  photoFile: File | null;
+  trend: RecoveryTrend;
+};
+
+function RecoveryCheckinFields({
+  disabled,
+  note,
+  onNoteChange,
+  onPhotoChange,
+  onTrendChange,
+  photoFile,
+  trend,
+}: RecoveryCheckinFieldsProps) {
+  return (
+    <>
+      <ChoiceField
+        disabled={disabled}
+        label="Oproti minule"
+        onValueChange={onTrendChange}
+        options={RECOVERY_TREND_OPTIONS}
+        value={trend}
+      />
+      <label className="text-field">
+        <Text as="span" variant="label">
+          Foto (nepovinné)
+        </Text>
+        <input
+          accept="image/*"
+          disabled={disabled}
+          onChange={(event) => onPhotoChange(event.target.files?.[0] ?? null)}
+          type="file"
+        />
+        {photoFile ? (
+          <Text as="span" variant="caption" tone="muted">
+            {photoFile.name}
+          </Text>
+        ) : null}
+      </label>
+      <label className="text-field">
+        <Text as="span" variant="label">
+          Poznámka (nepovinné)
+        </Text>
+        <textarea
+          disabled={disabled}
+          onChange={(event) => onNoteChange(event.target.value || null)}
+          rows={3}
+          value={note}
+        />
+      </label>
+    </>
   );
 }
 
@@ -649,6 +841,11 @@ function formatProfileLessList(kytky: ProfileLessKytkaItem[]): string {
 }
 
 const PROFILE_LESS_DISMISS_KEY = "nmch:dismissed-profile-less-kytky";
+
+function getRandomSergeantMessage(): string {
+  const index = Math.floor(Math.random() * DAILY_SERGEANT_MESSAGES.length);
+  return DAILY_SERGEANT_MESSAGES[index];
+}
 
 function readDismissedProfileLessIds(): string[] {
   try {
@@ -728,5 +925,93 @@ function buildGroups(
     };
   });
 
-  return [...quickGroups, ...others].sort((a, b) => a.priorityRank - b.priorityRank);
+  return [...quickGroups, ...others].sort((a, b) =>
+    compareTaskGroups(a, b, kytkaById),
+  );
+}
+
+function compareTaskGroups(
+  a: TaskGroup,
+  b: TaskGroup,
+  kytkaById: Map<string, KytkaListItem>,
+): number {
+  if (a.priorityRank !== b.priorityRank) {
+    return a.priorityRank - b.priorityRank;
+  }
+
+  const labelDiff = taskGroupLabel(a, kytkaById).localeCompare(
+    taskGroupLabel(b, kytkaById),
+    "cs-CZ",
+  );
+  if (labelDiff !== 0) {
+    return labelDiff;
+  }
+
+  return taskGroupTypeRank(a) - taskGroupTypeRank(b);
+}
+
+function taskGroupTypeRank(group: TaskGroup): number {
+  const taskType = group.kind === "quick" ? group.taskType : group.task.task_type;
+  return TASK_TYPE_RANK[taskType] ?? 99;
+}
+
+function taskGroupLabel(
+  group: TaskGroup,
+  kytkaById: Map<string, KytkaListItem>,
+): string {
+  if (group.kind === "quick") {
+    const firstTask = group.tasks[0];
+    const firstKytka = firstTask?.kytka_id
+      ? kytkaById.get(firstTask.kytka_id)
+      : null;
+    return (
+      firstKytka?.container_name ??
+      firstKytka?.display_name ??
+      firstTask?.container_id ??
+      firstTask?.kytka_id ??
+      group.key
+    );
+  }
+
+  const kytka = group.task.kytka_id ? kytkaById.get(group.task.kytka_id) : null;
+  return kytka?.display_name ?? group.task.container_id ?? group.key;
+}
+
+function isConditionTask(taskType: string): boolean {
+  return taskType === "checkin" || taskType === "pest_followup";
+}
+
+function isPlantStatus(value: string | undefined | null): value is CareEventCondition {
+  return value === "ok" || value === "monitoring" || value === "sick";
+}
+
+function normalizePlantStatus(value: string | undefined | null): CareEventCondition {
+  return isPlantStatus(value) ? value : "ok";
+}
+
+function isUnderCare(value: string | undefined | null): boolean {
+  return value === "monitoring" || value === "sick";
+}
+
+function recoveryTrendToCondition(
+  trend: RecoveryTrend,
+  currentStatus: string | undefined | null,
+): CareEventCondition {
+  if (trend === "worse") {
+    return "sick";
+  }
+  if (trend === "better") {
+    return "monitoring";
+  }
+
+  return isUnderCare(currentStatus) ? normalizePlantStatus(currentStatus) : "monitoring";
+}
+
+function buildRecoveryNote(trend: RecoveryTrend, note: string | null | undefined): string {
+  const trimmed = note?.trim();
+  if (!trimmed) {
+    return RECOVERY_TREND_NOTE[trend];
+  }
+
+  return `${RECOVERY_TREND_NOTE[trend]} ${trimmed}`;
 }

@@ -29,9 +29,10 @@ export function AuthenticatedApp({
   showIntro,
 }: AuthenticatedAppProps) {
   const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const [visitedTabs, setVisitedTabs] = useState<Set<AppTab>>(() => new Set(["today"]));
 
-  function renderScreen() {
-    switch (activeTab) {
+  function renderScreen(tab: AppTab) {
+    switch (tab) {
       case "plants":
         return <PlantsScreen />;
       case "places":
@@ -44,14 +45,38 @@ export function AuthenticatedApp({
     }
   }
 
+  function handleTabChange(itemId: string) {
+    const nextTab = itemId as AppTab;
+    setVisitedTabs((current) => {
+      if (current.has(nextTab)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.add(nextTab);
+      return next;
+    });
+    setActiveTab(nextTab);
+  }
+
   return (
     <div className="authenticated-app">
       {showIntro ? <SergeantIntroModal onDismiss={onIntroDismiss} /> : null}
-      {renderScreen()}
+      {navItems
+        .filter((item) => visitedTabs.has(item.id))
+        .map((item) => (
+          <div
+            className="authenticated-app__screen"
+            hidden={item.id !== activeTab}
+            key={item.id}
+          >
+            {renderScreen(item.id)}
+          </div>
+        ))}
       <BottomNav
         activeItemId={activeTab}
         items={navItems}
-        onItemChange={(itemId) => setActiveTab(itemId as AppTab)}
+        onItemChange={handleTabChange}
       />
     </div>
   );

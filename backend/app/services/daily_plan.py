@@ -1,3 +1,4 @@
+from asyncio import gather
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -20,6 +21,9 @@ _NEGLECT_ESCALATION_MULTIPLIER = 2
 _ABSENCE_LOOKAHEAD_DAYS = 3
 _INSPECTION_EVENT_TYPES = ("checkin", "pest_observation", "treatment")
 _WEATHER_CACHE_HOURS = 3
+_FERTILIZING_FALLBACK_HINT = (
+    "Nehnoj suchý substrát. Když si nejsi jistý, radši vynech."
+)
 
 _TASK_SELECT = (
     "id,task_date,task_type,target_type,kytka_id,container_id,status,priority,"
@@ -38,12 +42,18 @@ async def refresh_daily_plan(
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=20) as client:
         await _rollover_missed(client, headers, workspace_id, today)
 
-        kytky = await _fetch_kytky(client, headers, workspace_id)
-        last_events = await _fetch_last_events(client, headers, workspace_id)
-        absences = await _fetch_upcoming_absences(client, headers, workspace_id, today)
-        member_count = await _fetch_active_member_count(client, headers, workspace_id)
-        existing_statuses = await _fetch_existing_task_statuses(
-            client, headers, workspace_id, today
+        (
+            kytky,
+            last_events,
+            absences,
+            member_count,
+            existing_statuses,
+        ) = await gather(
+            _fetch_kytky(client, headers, workspace_id),
+            _fetch_last_events(client, headers, workspace_id),
+            _fetch_upcoming_absences(client, headers, workspace_id, today),
+            _fetch_active_member_count(client, headers, workspace_id),
+            _fetch_existing_task_statuses(client, headers, workspace_id, today),
         )
 
         forecasts = await _fetch_and_snapshot_weather(
@@ -76,6 +86,77 @@ async def refresh_daily_plan(
                 today,
                 existing_statuses,
             )
+
+        response = await client.get(
+            "/care_tasks",
+            headers=headers,
+            params={
+                "select": _TASK_SELECT,
+                "workspace_id": f"eq.{workspace_id}",
+                "task_date": f"eq.{today.isoformat()}",
+                "order": "priority.desc,created_at.asc",
+            },
+        )
+        raise_supabase_error(response)
+        tasks = response.json()
+
+        active_today = [
+            absence
+            for absence in absences
+            if date.fromisoformat(absence["starts_on"]) <= today
+        ]
+        names = await _fetch_profile_names(
+            client, headers, [str(absence["user_id"]) for absence in active_today]
+        )
+
+    everyone_away = member_count > 0 and _covers_all_members(
+        absences, today, member_count
+    )
+    active_absences = [
+        {
+            "display_name": names.get(str(absence["user_id"])),
+            "ends_on": absence["ends_on"],
+        }
+        for absence in active_today
+    ]
+
+    return {
+        "tasks": tasks,
+        "profile_less_kytky": profile_less_kytky,
+        "everyone_away_today": everyone_away,
+        "active_absences": active_absences,
+        "light_mismatches": light_mismatches,
+    }
+
+
+async def read_daily_plan(
+    headers: dict[str, str], workspace: dict[str, Any]
+) -> dict[str, Any]:
+    workspace_id = workspace["id"]
+    tz = ZoneInfo(str(workspace.get("timezone") or "Europe/Prague"))
+    today = datetime.now(tz).date()
+
+    async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=20) as client:
+        kytky, absences, member_count = await gather(
+            _fetch_kytky(client, headers, workspace_id),
+            _fetch_upcoming_absences(client, headers, workspace_id, today),
+            _fetch_active_member_count(client, headers, workspace_id),
+        )
+
+        profile_less_kytky: list[dict[str, Any]] = []
+        light_mismatches: list[dict[str, Any]] = []
+        for kytka in kytky:
+            if kytka.get("status") == "dead":
+                continue
+            if kytka.get("care_profile_id") is None:
+                profile_less_kytky.append(
+                    {"id": kytka["id"], "display_name": kytka.get("display_name")}
+                )
+                continue
+
+            mismatch = _light_mismatch(kytka)
+            if mismatch is not None:
+                light_mismatches.append(mismatch)
 
         response = await client.get(
             "/care_tasks",
@@ -185,7 +266,8 @@ async def _fetch_kytky(
                 "maintenance_interval_days,maintenance_notes,"
                 "feeding_enabled,feeding_interval_days,feeding_months,"
                 "heat_sensitive_above_c,cold_sensitive_below_c,frost_sensitive,"
-                "light_need)"
+                "light_need,survival_watering_hint,survival_heat_hint,"
+                "survival_frost_hint,survival_fertilizing_hint)"
             ),
             "workspace_id": f"eq.{workspace_id}",
         },
@@ -502,6 +584,11 @@ async def _generate_for_kytka(
     is_dormant = status_value == "dormant"
     is_sick_or_monitoring = status_value in ("sick", "monitoring")
     priority = "high" if status_value == "sick" else "normal"
+    heat_context = _heat_context(
+        zone.get("environment"),
+        today_forecast,
+        profile.get("heat_sensitive_above_c"),
+    )
 
     departure = _upcoming_departure(absences, today)
     if departure is not None and priority == "normal":
@@ -529,9 +616,17 @@ async def _generate_for_kytka(
         threshold = effective_min if effective_min is not None else effective_max
         rain_delay_days = _rain_delay_days(zone.get("rain_reach"), today_forecast)
 
-        due = (
+        due_by_interval = (
             threshold is not None and gating_days_since >= threshold + rain_delay_days
         )
+        pulled_forward_by_heat = False
+        if not due_by_interval and threshold is not None and heat_context is not None:
+            pull_forward_threshold = max(1, threshold - 1)
+            pulled_forward_by_heat = (
+                rain_delay_days == 0 and gating_days_since >= pull_forward_threshold
+            )
+
+        due = due_by_interval or pulled_forward_by_heat
 
         pulled_forward = False
         if not due and departure is not None and threshold is not None:
@@ -549,9 +644,34 @@ async def _generate_for_kytka(
             explanation = _watering_explanation(
                 watering_days_since, is_dormant, water_amount, watering_method
             )
+            if heat_context is not None:
+                explanation += _heat_watering_note(
+                    heat_context, pulled_forward_by_heat
+                )
             if departure is not None:
                 explanation += " " + _departure_note(
                     departure, today, effective_max, pulled_forward
+                )
+            recommendation_json = {
+                "profile_interval_days": [min_days, max_days],
+                "days_since_last_event": watering_days_since,
+                "weather_precipitation_mm": (
+                    today_forecast.get("precipitation_sum_mm")
+                    if today_forecast
+                    else None
+                ),
+                "kytka_status_modifier": "dormant" if is_dormant else None,
+                "pulled_forward_for_departure": pulled_forward,
+            }
+            if heat_context is not None:
+                recommendation_json.update(
+                    {
+                        "forecast_temp_max_c": heat_context["forecast_temp_max_c"],
+                        "heat_sensitive_above_c": heat_context[
+                            "heat_sensitive_above_c"
+                        ],
+                        "pulled_forward_for_heat": pulled_forward_by_heat,
+                    }
                 )
             await _upsert_task(
                 client,
@@ -564,19 +684,10 @@ async def _generate_for_kytka(
                 task_date=today,
                 priority=priority,
                 title="Zalít",
+                instructions=_profile_hint(profile, "survival_watering_hint"),
                 explanation=explanation,
                 recommended_amount_ml=water_amount,
-                recommendation_json={
-                    "profile_interval_days": [min_days, max_days],
-                    "days_since_last_event": watering_days_since,
-                    "weather_precipitation_mm": (
-                        today_forecast.get("precipitation_sum_mm")
-                        if today_forecast
-                        else None
-                    ),
-                    "kytka_status_modifier": "dormant" if is_dormant else None,
-                    "pulled_forward_for_departure": pulled_forward,
-                },
+                recommendation_json=recommendation_json,
                 existing_statuses=existing_statuses,
             )
 
@@ -588,8 +699,11 @@ async def _generate_for_kytka(
                 await escalate_to_monitoring(headers, workspace_id, UUID(kytka_id))
 
     # --- Fertilizing ---
-    if profile.get("feeding_enabled") and _is_active_feeding_month(
-        profile.get("feeding_months"), today
+    can_fertilize = not is_sick_or_monitoring and not is_dormant
+    if (
+        can_fertilize
+        and profile.get("feeding_enabled")
+        and _is_active_feeding_month(profile.get("feeding_months"), today)
     ):
         interval = profile.get("feeding_interval_days")
         if interval:
@@ -623,6 +737,10 @@ async def _generate_for_kytka(
                     task_date=today,
                     priority=priority,
                     title="Přihnojit",
+                    instructions=_profile_hint(
+                        profile, "survival_fertilizing_hint"
+                    )
+                    or _FERTILIZING_FALLBACK_HINT,
                     explanation=fertilizing_explanation,
                     recommendation_json={
                         "feeding_interval_days": interval,
@@ -662,8 +780,8 @@ async def _generate_for_kytka(
                 )
                 if not is_sick_or_monitoring
                 else (
-                    "Je pod dohledem — žádné povrchní mrknutí, "
-                    "pořádně, listy i hlína."
+                    "Je pod dohledem. Mrkni, jestli je lepší, stejná, "
+                    "nebo horší."
                 ),
                 recommendation_json={
                     "check_interval_days": effective_check,
@@ -721,8 +839,7 @@ async def _generate_for_kytka(
                 priority="low",
                 title="Vyfotit",
                 explanation=(
-                    "Vyfoť ji pro časovou osu — jestli teda ještě roste, "
-                    "a ne že jen přežívá."
+                    "Vyfoť ji do historie, ať máš s čím porovnávat později."
                 ),
                 recommendation_json={
                     "photo_interval_days": photo_interval,
@@ -781,11 +898,7 @@ async def _generate_for_kytka(
             and temp_min is not None
             and temp_min < frost_threshold
         )
-        heat_risk = (
-            heat_threshold is not None
-            and temp_max is not None
-            and temp_max > heat_threshold
-        )
+        heat_risk = heat_context is not None
 
         if frost_risk:
             await _upsert_task(
@@ -799,6 +912,7 @@ async def _generate_for_kytka(
                 task_date=today,
                 priority="high",
                 title="Ochránit před mrazem",
+                instructions=_profile_hint(profile, "survival_frost_hint"),
                 explanation=(
                     f"Dnes bude {temp_min} °C. Mráz jí nedělá dobře — "
                     f"dej ji dovnitř, nebo ji aspoň něčím přikryj."
@@ -821,6 +935,7 @@ async def _generate_for_kytka(
                 task_date=today,
                 priority="high",
                 title="Ochránit před horkem",
+                instructions=_profile_hint(profile, "survival_heat_hint"),
                 explanation=(
                     f"Dnes bude {temp_max} °C. To už není opalování, "
                     f"to je poprava — stín, nebo pořádná zálivka."
@@ -859,6 +974,44 @@ def _rain_delay_days(
         return _RAIN_PARTIAL_EXTRA_DAYS
 
     return 0
+
+
+def _heat_context(
+    environment: object,
+    today_forecast: dict[str, Any] | None,
+    heat_threshold: object,
+) -> dict[str, float] | None:
+    if environment == "indoor" or today_forecast is None or heat_threshold is None:
+        return None
+
+    temp_max = today_forecast.get("temp_max_c")
+    if not isinstance(temp_max, int | float) or not isinstance(
+        heat_threshold, int | float
+    ):
+        return None
+    if temp_max <= heat_threshold:
+        return None
+
+    return {
+        "forecast_temp_max_c": float(temp_max),
+        "heat_sensitive_above_c": float(heat_threshold),
+    }
+
+
+def _heat_watering_note(
+    heat_context: dict[str, float], pulled_forward_by_heat: bool
+) -> str:
+    temp_max = heat_context["forecast_temp_max_c"]
+    if pulled_forward_by_heat:
+        return (
+            f" Dnes má být {temp_max:g} °C, takže tahám zálivku o den dopředu. "
+            "Zalij ráno nebo večer, ne v poledním grilu."
+        )
+
+    return (
+        f" Dnes má být {temp_max:g} °C. Zalij ráno nebo večer, "
+        "ať z toho není parní lázeň."
+    )
 
 
 def _watering_explanation(
@@ -947,6 +1100,15 @@ def _nested(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _profile_hint(profile: dict[str, Any], key: str) -> str | None:
+    value = profile.get(key)
+    if not isinstance(value, str):
+        return None
+
+    stripped = value.strip()
+    return stripped or None
+
+
 async def _upsert_task(
     client: httpx.AsyncClient,
     headers: dict[str, str],
@@ -962,6 +1124,7 @@ async def _upsert_task(
     explanation: str,
     recommendation_json: dict[str, Any],
     existing_statuses: dict[str, str],
+    instructions: str | None = None,
     recommended_amount_ml: int | None = None,
 ) -> None:
     target_id = kytka_id or container_id
@@ -984,6 +1147,7 @@ async def _upsert_task(
         "priority": priority,
         "source": "system",
         "title": title,
+        "instructions": instructions,
         "explanation": explanation,
         "recommended_amount_ml": recommended_amount_ml,
         "recommendation_json": recommendation_json,

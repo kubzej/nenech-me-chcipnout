@@ -30,6 +30,10 @@ export const DEFAULT_CARE_PROFILE_VALUES: CareProfileCreateRequest = {
   maintenance_interval_days: null,
   maintenance_notes: null,
   risk_notes: null,
+  survival_watering_hint: null,
+  survival_heat_hint: null,
+  survival_frost_hint: null,
+  survival_fertilizing_hint: null,
 };
 
 type CareProfileFieldsProps = {
@@ -154,7 +158,7 @@ export function CareProfileFields({
       <TextField
         disabled={disabled}
         inputMode="numeric"
-        label="Min. dní mezi zaléváním (nepovinné)"
+        label="Zalévat od (dní, nepovinné)"
         onChange={(event) =>
           onChange({
             water_interval_min_days: parseOptionalInt(event.target.value),
@@ -165,7 +169,7 @@ export function CareProfileFields({
       <TextField
         disabled={disabled}
         inputMode="numeric"
-        label="Max. dní mezi zaléváním (nepovinné)"
+        label="Nejpozději zalít po (dní, nepovinné)"
         onChange={(event) =>
           onChange({
             water_interval_max_days: parseOptionalInt(event.target.value),
@@ -280,6 +284,38 @@ export function CareProfileFields({
         onChange={(event) => onChange({ risk_notes: event.target.value || null })}
         value={values.risk_notes ?? ""}
       />
+      <TextField
+        disabled={disabled}
+        label="Survival hint: zálivka (max 120 znaků, nepovinné)"
+        onChange={(event) =>
+          onChange({ survival_watering_hint: event.target.value || null })
+        }
+        value={values.survival_watering_hint ?? ""}
+      />
+      <TextField
+        disabled={disabled}
+        label="Survival hint: horko (max 120 znaků, nepovinné)"
+        onChange={(event) =>
+          onChange({ survival_heat_hint: event.target.value || null })
+        }
+        value={values.survival_heat_hint ?? ""}
+      />
+      <TextField
+        disabled={disabled}
+        label="Survival hint: mráz/chlad (max 120 znaků, nepovinné)"
+        onChange={(event) =>
+          onChange({ survival_frost_hint: event.target.value || null })
+        }
+        value={values.survival_frost_hint ?? ""}
+      />
+      <TextField
+        disabled={disabled}
+        label="Survival hint: hnojení (max 120 znaků, nepovinné)"
+        onChange={(event) =>
+          onChange({ survival_fertilizing_hint: event.target.value || null })
+        }
+        value={values.survival_fertilizing_hint ?? ""}
+      />
 
       <Text as="p" tone="muted" variant="caption">
         Appková nastavení — tohle není vlastnost druhu, AI se na to neptá.
@@ -310,7 +346,7 @@ export function CareProfileFields({
       <TextField
         disabled={disabled}
         inputMode="numeric"
-        label="Foto check-in (dní)"
+        label="Fotka do historie (dní)"
         onChange={(event) =>
           onChange({
             photo_interval_days: parseOptionalInt(event.target.value) ?? 7,
@@ -366,12 +402,18 @@ na druhu — místo toho popiš praktický způsob v "watering_method", např.
 "zalévat, dokud voda nezačne odtékat z drenáže") ani na frekvenci
 kontrol/fotek (to je moje vlastní rozhodnutí o appce, ne botanický fakt).
 
+Survival hinty jsou krátké věty pro kartu "Dnes". Piš je civilně, česky,
+bez odborných zkratek a max 120 znaků. "survival_watering_hint" smí být jen
+věta, která platí při každém zalití a zabrání typické chybě. Počasové rady
+nepiš do zálivky — horko patří do "survival_heat_hint", mráz/chlad do
+"survival_frost_hint". Pokud není co užitečného krátce říct, vrať null.
+
 Odpověz ČISTĚ jako JSON objekt (bez markdown bloku, bez dalšího textu
 kolem) přesně v tomto tvaru:
 
 {
-${scientificNameLine}  "water_interval_min_days": <číslo nebo null>,
-  "water_interval_max_days": <číslo nebo null>,
+${scientificNameLine}  "water_interval_min_days": <po kolika dnech typicky začít zvažovat běžné zalití, číslo nebo null>,
+  "water_interval_max_days": <nejzazší bezpečný interval bez zalití, číslo nebo null>,
   "moisture_preference": <jedno z: "dry_between", "slightly_moist", "moist", "wet", nebo null>,
   "drought_tolerance": <jedno z: "low", "medium", "high", nebo null>,
   "overwatering_risk": <jedno z: "low", "medium", "high", nebo null>,
@@ -384,7 +426,11 @@ ${scientificNameLine}  "water_interval_min_days": <číslo nebo null>,
   "feeding_interval_days": <číslo nebo null>,
   "feeding_months": <pole čísel 1-12, nebo null>,
   "maintenance_notes": <krátká poznámka jako string, nebo null>,
-  "risk_notes": <krátká poznámka jako string, nebo null>
+  "risk_notes": <krátká poznámka jako string, nebo null>,
+  "survival_watering_hint": <jedna krátká praktická věta pro kartu Dnes, česky, max 120 znaků, nebo null>,
+  "survival_heat_hint": <jedna krátká praktická věta pro horko, česky, max 120 znaků, nebo null>,
+  "survival_frost_hint": <jedna krátká praktická věta pro mráz/chlad, česky, max 120 znaků, nebo null>,
+  "survival_fertilizing_hint": <jedna krátká praktická věta pro hnojení, česky, max 120 znaků, nebo null>
 }`;
 }
 
@@ -433,13 +479,21 @@ function parseAiJson(raw: string): {
 }
 
 const AI_FIELD_MAX_LENGTHS: Partial<Record<keyof CareProfileCreateRequest, number>> = {
-  watering_method: 240,
   scientific_name: 160,
+  survival_fertilizing_hint: 120,
+  survival_frost_hint: 120,
+  survival_heat_hint: 120,
+  survival_watering_hint: 120,
+  watering_method: 240,
 };
 
 const AI_FIELD_LABELS: Partial<Record<keyof CareProfileCreateRequest, string>> = {
-  watering_method: "způsob zalévání",
   scientific_name: "vědecký název",
+  survival_fertilizing_hint: "survival hint hnojení",
+  survival_frost_hint: "survival hint mráz/chlad",
+  survival_heat_hint: "survival hint horko",
+  survival_watering_hint: "survival hint zálivka",
+  watering_method: "způsob zalévání",
 };
 
 function stripOversizedFields(patch: Partial<CareProfileCreateRequest>): {
@@ -546,6 +600,10 @@ const FIELD_PARSERS: {
   pest_check_interval_days: asNullableNumber,
   maintenance_notes: asNullableString,
   risk_notes: asNullableString,
+  survival_watering_hint: asNullableString,
+  survival_heat_hint: asNullableString,
+  survival_frost_hint: asNullableString,
+  survival_fertilizing_hint: asNullableString,
 };
 
 function parseOptionalInt(value: string): number | null {

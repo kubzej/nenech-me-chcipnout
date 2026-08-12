@@ -34,6 +34,17 @@ export async function uploadPlantPhoto(
   return { storageBucket: BUCKET, storagePath };
 }
 
+export async function deleteUploadedPlantPhoto(storagePath: string): Promise<void> {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.storage.from(BUCKET).remove([storagePath]);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 async function compressImage(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
 

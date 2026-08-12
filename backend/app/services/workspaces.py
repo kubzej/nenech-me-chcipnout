@@ -1,3 +1,6 @@
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
 import httpx
 
 from app.core.auth import CurrentUser
@@ -7,8 +10,18 @@ from app.core.supabase_rest import (
     supabase_user_headers,
 )
 
+_WORKSPACE_CACHE_TTL = timedelta(seconds=60)
+_workspace_cache: dict[UUID, tuple[datetime, dict[str, object] | None]] = {}
+
 
 async def get_first_workspace(current_user: CurrentUser) -> dict[str, object] | None:
+    cached = _workspace_cache.get(current_user.user_id)
+    now = datetime.now(UTC)
+    if cached is not None:
+        expires_at, workspace = cached
+        if expires_at > now:
+            return workspace.copy() if workspace is not None else None
+
     headers = supabase_user_headers(current_user.access_token)
 
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
@@ -27,6 +40,10 @@ async def get_first_workspace(current_user: CurrentUser) -> dict[str, object] | 
         memberships = membership_response.json()
 
         if not memberships:
+            _workspace_cache[current_user.user_id] = (
+                now + _WORKSPACE_CACHE_TTL,
+                None,
+            )
             return None
 
         membership = memberships[0]
@@ -44,13 +61,22 @@ async def get_first_workspace(current_user: CurrentUser) -> dict[str, object] | 
         workspaces = workspace_response.json()
 
         if not workspaces:
+            _workspace_cache[current_user.user_id] = (
+                now + _WORKSPACE_CACHE_TTL,
+                None,
+            )
             return None
 
         workspace = workspaces[0]
-        return {
+        result = {
             "id": workspace["id"],
             "name": workspace["name"],
             "timezone": workspace["timezone"],
             "role": membership["role"],
             "created_at": workspace["created_at"],
         }
+        _workspace_cache[current_user.user_id] = (
+            now + _WORKSPACE_CACHE_TTL,
+            result,
+        )
+        return result.copy()

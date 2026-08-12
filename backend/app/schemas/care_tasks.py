@@ -56,11 +56,29 @@ class CareTaskCompleteRequest(BaseModel):
     method: str | None = None
     condition: CareEventCondition | None = None
     note: str | None = None
+    photo_storage_path: str | None = None
+    photo_note: str | None = None
+    photo_health_snapshot: str | None = None
 
 
 class CareTaskCompleteResponse(BaseModel):
     task: CareTaskItem
     event_id: UUID
+    photo_id: UUID | None = None
+
+
+class CareTaskCompleteGroupRequest(CareTaskCompleteRequest):
+    task_ids: list[UUID] = Field(min_length=1)
+
+
+class CareTaskCompleteGroupItem(BaseModel):
+    task: CareTaskItem
+    event_id: UUID
+    photo_id: UUID | None = None
+
+
+class CareTaskCompleteGroupResponse(BaseModel):
+    items: list[CareTaskCompleteGroupItem]
 
 
 class CareTaskSkipRequest(BaseModel):

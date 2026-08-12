@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Pencil, Plane, Plus } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { ChoiceField } from "../../components/ui/ChoiceField";
+import { useConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { IconButton } from "../../components/ui/IconButton";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
@@ -49,6 +50,7 @@ export function AbsencesSection({ onBack }: AbsencesSectionProps) {
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
   const [editingAbsence, setEditingAbsence] = useState<AbsenceItem | null>(null);
   const [formValues, setFormValues] = useState<FormState>(DEFAULT_FORM_STATE);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const loadData = useCallback(async (options: { showLoading?: boolean } = {}) => {
     setError(null);
@@ -154,7 +156,12 @@ export function AbsencesSection({ onBack }: AbsencesSectionProps) {
   }
 
   async function handleDelete(absence: AbsenceItem) {
-    if (!window.confirm("Smazat tuto absenci?")) {
+    const confirmed = await confirm({
+      confirmLabel: "Smazat",
+      title: "Smazat tuto absenci?",
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -194,6 +201,8 @@ export function AbsencesSection({ onBack }: AbsencesSectionProps) {
           {error}
         </Text>
       ) : null}
+
+      {confirmDialog}
 
       {!isLoading && !error && absences.length === 0 ? (
         <EmptyState

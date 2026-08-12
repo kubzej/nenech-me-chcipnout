@@ -2,3 +2,7 @@
   min-height: 100vh;
   padding-bottom: 88px;
 }
+
+.authenticated-app__screen[hidden] {
+  display: none;
+}

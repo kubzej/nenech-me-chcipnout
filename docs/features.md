@@ -15,28 +15,34 @@ for everything a user can delete from the UI.
 
 A `Kytka` is the care target — one plant or a grouped planting (e.g. mixed
 herbs in one trough count as separate Kytky sharing a container). Each has a
-status (`ok` / `monitoring` / `sick` / `dormant` / `dead`), optional care
-profile link, and an avatar photo. List + detail views, full CRUD.
+status (`ok` / `monitoring` / `sick` / `dormant`; `dead` may exist only as
+legacy data), optional care profile link, and an avatar photo. List + detail
+views, full CRUD.
 
 ## Care profily (Care Profiles)
 
-Species-level templates: watering interval (min/max days) + amount/method,
+Species-level templates: watering cadence (`Zalévat od` = when to start
+normal watering; `Nejpozději` = upper safety bound) + amount/method,
 moisture preference, drought tolerance, overwatering risk, light need,
 heat/cold/frost sensitivity, feeding cadence + active months, check/photo/pest
-intervals, free-text maintenance and risk notes. Manual entry only — external
+intervals, short survival hints for Today cards, free-text maintenance and
+risk notes. Manual entry plus a copy/paste AI prompt helper for species facts —
+external
 plant databases (Perenual, Trefle) were evaluated and rejected (paywalled or
-empty care data); AI-assisted profile creation from a photo+name is a
-deferred future direction, not built.
+empty care data).
 
 ## Care events (history)
 
 Logged event types: watering, fertilizing, checkin, pest observation,
-treatment, maintenance, weather protection. Watering/fertilizing are
+treatment, maintenance, photo observation. Weather-protection tasks are
+completed as treatment events, because the history should record what was
+actually done. Watering/fertilizing are
 container-scoped (one event covers every Kytka sharing that container);
 everything else is Kytka-scoped. Logging a `checkin`/`pest_observation` with
-a bad `condition` (wilting/yellowing/pests/damaged) auto-transitions the
-Kytka to `monitoring`; logging `condition = ok` while monitoring flips it back
-to `ok`. `sick` is never automatic — manual escalation only.
+`condition = ok|monitoring|sick` directly sets the Kytka status to that value.
+The timeline displays this explicitly as `Nastaven stav: ...`. Deleting or
+editing an old event does not recompute current status retroactively; adjust
+the Kytka manually if you are correcting history.
 
 ## Dnes (daily plan)
 
@@ -44,39 +50,61 @@ The core proactive feature — see architecture.md for the generation engine
 itself. From the screen:
 
 - Watering/fertilizing tasks for Kytky sharing a container merge into one
-  action ("Zalij Obývák") with a single tap completing all of them.
+  action ("Zalij Obývák") with a single tap completing all of them through one
+  atomic backend call.
 - A "Zalít vše" / "Přihnojit vše" bulk action appears once there are 2+
   separate watering/fertilizing actions for the day (different containers),
   so a balcony full of separate pots doesn't mean tapping through each one.
-- Other task types (checkin, pest follow-up, weather protection,
-  photo check-in) stay individual — they genuinely need looking at one plant
-  at a time, batching would defeat the point.
+- Other task types (checkin, pest follow-up, weather protection, photo history
+  reminders) stay individual — they genuinely need looking at one plant at a
+  time, batching would defeat the point.
+- Cards are ordered by priority first, then by Kytka/container name, then by
+  task type as a tie-breaker. The UI does not merge all tasks for one plant
+  into one card; it just keeps related cards near each other.
 - Each card shows the Kytka's own photo (or a placeholder leaf), not just a
   generic task-type icon.
+- Cards can show one short survival hint from the care profile when there is
+  a practical risk worth surfacing.
+- Sick/monitoring check-ins use a simpler recovery question:
+  `Oproti minule: Lepší / Stejná / Horší`, with an optional photo. Worse
+  keeps/sets `sick`; same keeps the current watched state; better moves the
+  plant to `monitoring` rather than declaring it OK immediately.
 - Absence-aware: a watering that would otherwise fall during a planned trip
   gets pulled forward automatically; if even a fresh watering wouldn't last
   the whole trip, the explanation says so and suggests asking someone to
   check in partway through.
+- Weather-aware: rain can delay outdoor watering; forecast heat can pull
+  watering forward and notes recommend morning/evening instead of midday.
+- Fertilizing is deliberately conservative: no fertilizing task is generated
+  for `sick`, `monitoring`, or `dormant` Kytky, and fertilizing cards include a
+  short "do not fertilize dry substrate / skip if unsure" guardrail when the
+  profile has no better species-specific hint.
 - A soft nudge appears when a Kytka has no care profile (nothing gets
   generated for it), and a banner shows who's currently away and until when.
-- Task explanations are written as direct first-person instructions from the
-  plant ("Zalij mě, ať nevyschnu."), not raw interval/data dumps — matches
-  the app's "worried, slightly scolding plant guardian" voice.
+- Task explanations are human-readable instructions/reasons, not raw
+  interval/data dumps — matches the app's worried, slightly scolding plant
+  guardian voice.
 
 ## Photos
 
 - Direct-from-browser upload to Supabase Storage (no backend in the binary
   path), client-side compressed first. Metadata (`plant_photos`) goes through
-  the backend like everything else.
-- Standalone "📷 Foto" action on the Kytka detail screen, and an optional
+  the backend like everything else. Delete removes both metadata and the
+  Storage object; failed metadata writes try to clean up the just-uploaded
+  object.
+- Standalone "Foto" action on the Kytka detail screen, and an optional
   photo attach on the checkin/pest-observation event form.
 - Combined timeline on Kytka detail: event-attached photos render inline
   inside that event's row; standalone photos get their own row.
 - Tapping any photo opens a larger viewer with **Nastavit jako profilovku**
   (set as avatar) and delete. First photo ever added still becomes the
   avatar automatically as a default.
-- Completing a weekly `photo_observation` task creates both a linked
-  `care_events` row and a `plant_photos` row in one flow.
+- A `photo_observation` task is intentionally just a "photo to history"
+  reminder, not the sick-plant recovery flow. Sick/monitoring recovery happens
+  through check-in, with photo as an optional attachment.
+- Completing a `photo_observation` task creates the linked `care_events` row,
+  marks the task done, and stores `plant_photos` metadata in the same database
+  RPC after the browser has uploaded the compressed image to Storage.
 
 ## Absence
 
