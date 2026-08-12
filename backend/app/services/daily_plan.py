@@ -15,10 +15,15 @@ from app.services.weather import fetch_forecast_json
 _RAIN_SKIP_MM = 5.0
 _RAIN_SKIP_PROBABILITY = 60.0
 _RAIN_PARTIAL_MM = 2.0
-_RAIN_PARTIAL_EXTRA_DAYS = 1
+_RAIN_LOOKAHEAD_DAYS = 5
+_RAIN_FULL_DELAY_MAX_DAYS = 3
+_RAIN_PARTIAL_DELAY_MAX_DAYS = 2
 _DORMANT_MULTIPLIER = 3
 _NEGLECT_ESCALATION_MULTIPLIER = 2
 _ABSENCE_LOOKAHEAD_DAYS = 3
+_HEATWAVE_LOOKAHEAD_DAYS = 5
+_HEATWAVE_MIN_STREAK_DAYS = 2
+_HEATWAVE_PULL_FORWARD_MAX_DAYS = 3
 _INSPECTION_EVENT_TYPES = ("checkin", "pest_observation", "treatment")
 _WEATHER_CACHE_HOURS = 3
 _FERTILIZING_FALLBACK_HINT = (
@@ -589,6 +594,12 @@ async def _generate_for_kytka(
         today_forecast,
         profile.get("heat_sensitive_above_c"),
     )
+    heat_pull_context = _heat_pull_forward_context(
+        zone.get("environment"),
+        daily_forecast,
+        today,
+        profile.get("heat_sensitive_above_c"),
+    )
 
     departure = _upcoming_departure(absences, today)
     if departure is not None and priority == "normal":
@@ -614,14 +625,26 @@ async def _generate_for_kytka(
         )
 
         threshold = effective_min if effective_min is not None else effective_max
-        rain_delay_days = _rain_delay_days(zone.get("rain_reach"), today_forecast)
+        rain_delay_context = _rain_delay_context(
+            zone.get("rain_reach"), daily_forecast, today
+        )
+        rain_delay_days = (
+            int(rain_delay_context["delay_days"])
+            if rain_delay_context is not None
+            else 0
+        )
 
         due_by_interval = (
             threshold is not None and gating_days_since >= threshold + rain_delay_days
         )
         pulled_forward_by_heat = False
-        if not due_by_interval and threshold is not None and heat_context is not None:
-            pull_forward_threshold = max(1, threshold - 1)
+        if (
+            not due_by_interval
+            and threshold is not None
+            and heat_pull_context is not None
+        ):
+            pull_forward_days = int(heat_pull_context["pull_forward_days"])
+            pull_forward_threshold = max(1, threshold - pull_forward_days)
             pulled_forward_by_heat = (
                 rain_delay_days == 0 and gating_days_since >= pull_forward_threshold
             )
@@ -644,9 +667,12 @@ async def _generate_for_kytka(
             explanation = _watering_explanation(
                 watering_days_since, is_dormant, water_amount, watering_method
             )
-            if heat_context is not None:
+            heat_note_context = heat_context or (
+                heat_pull_context if pulled_forward_by_heat else None
+            )
+            if heat_note_context is not None:
                 explanation += _heat_watering_note(
-                    heat_context, pulled_forward_by_heat
+                    heat_note_context, pulled_forward_by_heat
                 )
             if departure is not None:
                 explanation += " " + _departure_note(
@@ -660,17 +686,38 @@ async def _generate_for_kytka(
                     if today_forecast
                     else None
                 ),
+                "rain_delay_days": rain_delay_days,
                 "kytka_status_modifier": "dormant" if is_dormant else None,
                 "pulled_forward_for_departure": pulled_forward,
             }
-            if heat_context is not None:
+            if rain_delay_context is not None:
                 recommendation_json.update(
                     {
-                        "forecast_temp_max_c": heat_context["forecast_temp_max_c"],
-                        "heat_sensitive_above_c": heat_context[
+                        "rain_days": rain_delay_context["rain_days"],
+                        "rain_starts_on": rain_delay_context["rain_starts_on"],
+                        "rain_total_precipitation_mm": rain_delay_context[
+                            "total_precipitation_mm"
+                        ],
+                        "rain_reach": rain_delay_context["rain_reach"],
+                    }
+                )
+            if heat_note_context is not None:
+                recommendation_json.update(
+                    {
+                        "forecast_temp_max_c": heat_note_context[
+                            "forecast_temp_max_c"
+                        ],
+                        "heat_sensitive_above_c": heat_note_context[
                             "heat_sensitive_above_c"
                         ],
                         "pulled_forward_for_heat": pulled_forward_by_heat,
+                        "heatwave_days": heat_note_context.get("heatwave_days"),
+                        "heatwave_starts_on": heat_note_context.get(
+                            "heatwave_starts_on"
+                        ),
+                        "heat_pull_forward_days": heat_note_context.get(
+                            "pull_forward_days"
+                        ),
                     }
                 )
             await _upsert_task(
@@ -954,26 +1001,74 @@ def _apply_dormant(value: int | None, is_dormant: bool) -> int | None:
     return value * _DORMANT_MULTIPLIER if is_dormant else value
 
 
-def _rain_delay_days(
-    rain_reach: str | None, today_forecast: dict[str, Any] | None
-) -> int:
-    if rain_reach not in ("full", "partial") or today_forecast is None:
-        return 0
+def _rain_delay_context(
+    rain_reach: object,
+    daily_forecast: list[dict[str, Any]],
+    today: date,
+) -> dict[str, float | int | str] | None:
+    if rain_reach not in ("full", "partial"):
+        return None
 
-    precipitation = today_forecast.get("precipitation_sum_mm") or 0
-    probability = today_forecast.get("precipitation_probability_max") or 0
+    rainy_by_date: dict[date, float] = {}
+    horizon = today + timedelta(days=_RAIN_LOOKAHEAD_DAYS - 1)
+    for forecast in daily_forecast:
+        forecast_date = _forecast_date(forecast.get("date"))
+        if forecast_date is None or forecast_date < today or forecast_date > horizon:
+            continue
+        if _is_effective_rain_day(str(rain_reach), forecast):
+            rainy_by_date[forecast_date] = float(
+                forecast.get("precipitation_sum_mm") or 0
+            )
 
-    rain_skip = (
-        precipitation >= _RAIN_SKIP_MM and probability >= _RAIN_SKIP_PROBABILITY
+    if not rainy_by_date:
+        return None
+
+    starts_on = today if today in rainy_by_date else today + timedelta(days=1)
+    if starts_on not in rainy_by_date:
+        return None
+
+    rain_days = 0
+    total_precipitation = 0.0
+    cursor = starts_on
+    while cursor in rainy_by_date:
+        rain_days += 1
+        total_precipitation += rainy_by_date[cursor]
+        cursor += timedelta(days=1)
+
+    max_delay = (
+        _RAIN_FULL_DELAY_MAX_DAYS
+        if rain_reach == "full"
+        else _RAIN_PARTIAL_DELAY_MAX_DAYS
     )
-    if rain_reach == "full" and rain_skip:
-        # Effectively skip today by pushing the threshold out by a day —
-        # generation re-evaluates tomorrow against fresh weather.
-        return 1
-    if rain_reach == "partial" and precipitation >= _RAIN_PARTIAL_MM:
-        return _RAIN_PARTIAL_EXTRA_DAYS
+    delay_days = min(max_delay, rain_days)
 
-    return 0
+    return {
+        "delay_days": delay_days,
+        "rain_days": rain_days,
+        "rain_starts_on": starts_on.isoformat(),
+        "rain_starts_in_days": (starts_on - today).days,
+        "total_precipitation_mm": round(total_precipitation, 1),
+        "rain_reach": str(rain_reach),
+    }
+
+
+def _is_effective_rain_day(rain_reach: str, forecast: dict[str, Any]) -> bool:
+    precipitation = forecast.get("precipitation_sum_mm") or 0
+    probability = forecast.get("precipitation_probability_max") or 0
+    if not isinstance(precipitation, int | float):
+        return False
+    if not isinstance(probability, int | float):
+        probability = 0
+
+    if rain_reach == "full":
+        return (
+            precipitation >= _RAIN_SKIP_MM
+            and probability >= _RAIN_SKIP_PROBABILITY
+        )
+    if rain_reach == "partial":
+        return precipitation >= _RAIN_PARTIAL_MM
+
+    return False
 
 
 def _heat_context(
@@ -989,7 +1084,7 @@ def _heat_context(
         heat_threshold, int | float
     ):
         return None
-    if temp_max <= heat_threshold:
+    if temp_max < heat_threshold:
         return None
 
     return {
@@ -998,11 +1093,86 @@ def _heat_context(
     }
 
 
+def _heat_pull_forward_context(
+    environment: object,
+    daily_forecast: list[dict[str, Any]],
+    today: date,
+    heat_threshold: object,
+) -> dict[str, float | int | str] | None:
+    if environment == "indoor" or heat_threshold is None:
+        return None
+    if not isinstance(heat_threshold, int | float):
+        return None
+
+    hot_by_date: dict[date, float] = {}
+    horizon = today + timedelta(days=_HEATWAVE_LOOKAHEAD_DAYS - 1)
+    for forecast in daily_forecast:
+        forecast_date = _forecast_date(forecast.get("date"))
+        if forecast_date is None or forecast_date < today or forecast_date > horizon:
+            continue
+
+        temp_max = forecast.get("temp_max_c")
+        if isinstance(temp_max, int | float) and temp_max >= heat_threshold:
+            hot_by_date[forecast_date] = float(temp_max)
+
+    if not hot_by_date:
+        return None
+
+    starts_on = today if today in hot_by_date else today + timedelta(days=1)
+    if starts_on not in hot_by_date:
+        return None
+
+    streak_days = 0
+    forecast_temp_max_c = hot_by_date[starts_on]
+    cursor = starts_on
+    while cursor in hot_by_date:
+        streak_days += 1
+        forecast_temp_max_c = max(forecast_temp_max_c, hot_by_date[cursor])
+        cursor += timedelta(days=1)
+
+    pull_forward_days = 1
+    if streak_days >= _HEATWAVE_MIN_STREAK_DAYS:
+        pull_forward_days = min(
+            _HEATWAVE_PULL_FORWARD_MAX_DAYS,
+            max(1, streak_days - 2),
+        )
+
+    return {
+        "forecast_temp_max_c": forecast_temp_max_c,
+        "heat_sensitive_above_c": float(heat_threshold),
+        "heatwave_days": streak_days,
+        "heatwave_starts_on": starts_on.isoformat(),
+        "heatwave_starts_in_days": (starts_on - today).days,
+        "pull_forward_days": pull_forward_days,
+    }
+
+
+def _forecast_date(value: object) -> date | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def _heat_watering_note(
-    heat_context: dict[str, float], pulled_forward_by_heat: bool
+    heat_context: dict[str, float | int | str], pulled_forward_by_heat: bool
 ) -> str:
-    temp_max = heat_context["forecast_temp_max_c"]
+    temp_max = float(heat_context["forecast_temp_max_c"])
+    heatwave_days = heat_context.get("heatwave_days")
+    heatwave_starts_in_days = heat_context.get("heatwave_starts_in_days")
     if pulled_forward_by_heat:
+        if isinstance(heatwave_days, int) and heatwave_days > 1:
+            if heatwave_starts_in_days == 0:
+                return (
+                    f" Čeká nás {heatwave_days} dní horka až {temp_max:g} °C, "
+                    "takže tahám zálivku dopředu. Zalij ráno nebo večer."
+                )
+            return (
+                f" Od zítřka má přijít {heatwave_days} dní horka až {temp_max:g} °C, "
+                "takže tahám zálivku dopředu. Zalij ráno nebo večer."
+            )
         return (
             f" Dnes má být {temp_max:g} °C, takže tahám zálivku o den dopředu. "
             "Zalij ráno nebo večer, ne v poledním grilu."

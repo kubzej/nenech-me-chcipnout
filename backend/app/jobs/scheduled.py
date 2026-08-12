@@ -24,7 +24,19 @@ async def run_daily_digest() -> dict[str, int]:
     alerts for anything newly at risk, then sends the per-user morning digest
     to whoever is due for it right now."""
     headers = supabase_service_headers()
-    summary = {"checked": 0, "sent": 0, "critical_sent": 0}
+    summary = {
+        "workspaces": 0,
+        "checked": 0,
+        "prefs_checked": 0,
+        "tasks": 0,
+        "pending_tasks": 0,
+        "due": 0,
+        "skipped_empty": 0,
+        "attempted": 0,
+        "sent": 0,
+        "zero_sent": 0,
+        "critical_sent": 0,
+    }
 
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=30) as client:
         workspaces = await _fetch_workspaces(client, headers)
@@ -34,7 +46,11 @@ async def run_daily_digest() -> dict[str, int]:
             if not prefs_rows:
                 continue
 
+            summary["workspaces"] += 1
             plan = await refresh_daily_plan(headers, workspace)
+            pending = [t for t in plan["tasks"] if t["status"] == "pending"]
+            summary["tasks"] += len(plan["tasks"])
+            summary["pending_tasks"] += len(pending)
 
             summary["critical_sent"] += await _send_critical_weather_alerts(
                 client, headers, workspace["id"], plan["tasks"], prefs_rows
@@ -42,6 +58,7 @@ async def run_daily_digest() -> dict[str, int]:
 
             for prefs in prefs_rows:
                 summary["checked"] += 1
+                summary["prefs_checked"] += 1
                 if not (prefs["master_enabled"] and prefs["daily_plan_enabled"]):
                     continue
 
@@ -51,18 +68,32 @@ async def run_daily_digest() -> dict[str, int]:
                 ):
                     continue
 
-                pending = [t for t in plan["tasks"] if t["status"] == "pending"]
-                if pending:
-                    sent = await send_push_notification(
+                summary["due"] += 1
+                if not pending:
+                    summary["skipped_empty"] += 1
+                    await _mark_sent(
+                        client,
                         headers,
                         workspace["id"],
                         prefs["user_id"],
-                        title="Dnes",
-                        body=_digest_body(len(pending)),
-                        url="/",
-                        tag="daily-digest",
+                        "last_daily_digest_sent_on",
+                        now_local.date(),
                     )
-                    summary["sent"] += sent
+                    continue
+
+                summary["attempted"] += 1
+                sent = await send_push_notification(
+                    headers,
+                    workspace["id"],
+                    prefs["user_id"],
+                    title="Dnes",
+                    body=_digest_body(len(pending)),
+                    url="/",
+                    tag="daily-digest",
+                )
+                summary["sent"] += sent
+                if sent == 0:
+                    summary["zero_sent"] += 1
 
                 await _mark_sent(
                     client,
