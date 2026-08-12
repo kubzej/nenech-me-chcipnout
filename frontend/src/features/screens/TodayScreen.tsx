@@ -404,7 +404,7 @@ export function TodayScreen() {
 
   return (
     <section className="screen screen--stack" aria-label="Dnes">
-      <ScreenHeader title="Dnes" subtitle="Co dnes zase zanedbáváš" />
+      <ScreenHeader title="Dnes" subtitle="Rozkazy pro tvoji domácí džungli" />
 
       {showDailySergeantMessage ? (
         <div className="today-sergeant-message">
@@ -518,7 +518,7 @@ export function TodayScreen() {
       {!isLoading && !error && groups.length === 0 ? (
         <EmptyState
           icon={<CircleCheck aria-hidden="true" size={30} strokeWidth={2.1} />}
-          title="Dnes nikdo neumírá. Zatím."
+          title="Dnes máš čistý štít."
           variant="inline"
         />
       ) : null}

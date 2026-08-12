@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { ArrowLeft, BellOff, Smartphone } from "lucide-react";
+import { ArrowLeft, BellOff, Send, Smartphone } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { ChoiceField } from "../../components/ui/ChoiceField";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ScreenHeader } from "../../components/ui/ScreenHeader";
 import { Text } from "../../components/ui/Text";
-import { TextField } from "../../components/ui/TextField";
 import { usePushNotifications } from "../../hooks/usePushNotifications";
 import type { NotificationPreferencesItem } from "../../types/push";
 import "../screens/screen.css";
@@ -14,20 +12,29 @@ type NotificationsSectionProps = {
   onBack: () => void;
 };
 
-const ON_OFF_OPTIONS = [
-  { label: "Zapnuto", value: "on" },
-  { label: "Vypnuto", value: "off" },
-] as const;
-
 type BoolPrefKey =
   | "daily_plan_enabled"
   | "critical_weather_enabled"
   | "sick_plant_enabled";
 
-const TYPE_LABELS: Record<BoolPrefKey, string> = {
-  daily_plan_enabled: "Denní přehled úkolů",
-  critical_weather_enabled: "Kritické počasí",
-  sick_plant_enabled: "Nemocná/sledovaná kytka",
+type NotificationTypeMeta = {
+  description: string;
+  label: string;
+};
+
+const TYPE_META: Record<BoolPrefKey, NotificationTypeMeta> = {
+  daily_plan_enabled: {
+    label: "Denní přehled úkolů",
+    description: "Ranní souhrn toho, co dnes zalít, přihnojit nebo zkontrolovat.",
+  },
+  critical_weather_enabled: {
+    label: "Kritické počasí",
+    description: "Varování při horku, mrazu nebo počasí, které může kytky dorazit.",
+  },
+  sick_plant_enabled: {
+    label: "Nemocná nebo sledovaná kytka",
+    description: "Upozornění, když se kytka přepne do stavu nemocná nebo sledovaná.",
+  },
 };
 
 export function NotificationsSection({ onBack }: NotificationsSectionProps) {
@@ -72,6 +79,7 @@ export function NotificationsSection({ onBack }: NotificationsSectionProps) {
     if (!value) {
       return;
     }
+
     void updateSettings({ [key]: value });
   }
 
@@ -120,7 +128,7 @@ export function NotificationsSection({ onBack }: NotificationsSectionProps) {
         />
       ) : (
         <>
-          <div className="entity-card">
+          <div className="settings-card notification-master">
             <div className="place-tree__header">
               <div>
                 <Text variant="title">Push notifikace</Text>
@@ -131,7 +139,11 @@ export function NotificationsSection({ onBack }: NotificationsSectionProps) {
                 </Text>
               </div>
             </div>
-            <Button disabled={isBusy} onClick={handleToggleMaster} variant="ghost">
+            <Button
+              disabled={isBusy}
+              onClick={handleToggleMaster}
+              variant="ghost"
+            >
               {isBusy ? "Chvilku..." : isSubscribed ? "Vypnout" : "Zapnout notifikace"}
             </Button>
           </div>
@@ -169,38 +181,106 @@ function TypeSettings({
   settings,
   testResult,
 }: TypeSettingsProps) {
+  const isEnabled = settings.master_enabled;
+
   return (
-    <div className="entity-card">
-      <Text as="p" variant="label">
-        Typy upozornění
-      </Text>
+    <div className="settings-card notification-settings">
+      <div className="notification-settings__header">
+        <div>
+          <Text variant="title">Typy upozornění</Text>
+          <Text as="p" variant="caption" tone="muted">
+            Vyber, co má stát za vyrušení. Když jsou push notifikace vypnuté, nic
+            z toho se neposílá.
+          </Text>
+        </div>
+      </div>
 
-      {(Object.keys(TYPE_LABELS) as BoolPrefKey[]).map((key) => (
-        <ChoiceField
-          disabled={!settings.master_enabled}
-          key={key}
-          label={TYPE_LABELS[key]}
-          onValueChange={(value) => onUpdateBool(key, value)}
-          options={ON_OFF_OPTIONS}
-          value={settings[key] ? "on" : "off"}
+      <div className="notification-settings__list">
+        {(Object.keys(TYPE_META) as BoolPrefKey[]).map((key) => (
+          <NotificationSwitchRow
+            description={TYPE_META[key].description}
+            disabled={!isEnabled}
+            isOn={settings[key]}
+            key={key}
+            label={TYPE_META[key].label}
+            onToggle={() => onUpdateBool(key, settings[key] ? "off" : "on")}
+          />
+        ))}
+      </div>
+
+      <label className={`notification-time-row${!isEnabled ? " is-disabled" : ""}`}>
+        <span className="notification-time-row__text">
+          <Text as="span" variant="label">
+            Čas denního přehledu
+          </Text>
+          <Text as="span" variant="caption" tone="muted">
+            Kdy má přijít ranní seznam úkolů.
+          </Text>
+        </span>
+        <input
+          className="notification-time-row__input"
+          disabled={!isEnabled}
+          onChange={(event) => onUpdateTime("morning_time", event.target.value)}
+          type="time"
+          value={settings.morning_time.slice(0, 5)}
         />
-      ))}
+      </label>
 
-      <TextField
-        label="Čas denního přehledu"
-        onChange={(event) => onUpdateTime("morning_time", event.target.value)}
-        type="time"
-        value={settings.morning_time.slice(0, 5)}
-      />
+      <div className="notification-settings__test">
+        <Button
+          disabled={isSendingTest || !isEnabled}
+          icon={<Send aria-hidden="true" size={16} />}
+          onClick={onSendTest}
+          variant="ghost"
+        >
+          {isSendingTest ? "Posílám..." : "Poslat testovací notifikaci"}
+        </Button>
+        {testResult ? (
+          <Text as="p" variant="caption" tone="muted">
+            {testResult}
+          </Text>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
-      <Button disabled={isSendingTest} onClick={onSendTest} variant="ghost">
-        {isSendingTest ? "Posílám..." : "Poslat testovací notifikaci"}
-      </Button>
-      {testResult ? (
-        <Text as="p" variant="caption" tone="muted">
-          {testResult}
+type NotificationSwitchRowProps = {
+  description: string;
+  disabled: boolean;
+  isOn: boolean;
+  label: string;
+  onToggle: () => void;
+};
+
+function NotificationSwitchRow({
+  description,
+  disabled,
+  isOn,
+  label,
+  onToggle,
+}: NotificationSwitchRowProps) {
+  return (
+    <div className={`notification-switch-row${disabled ? " is-disabled" : ""}`}>
+      <span className="notification-switch-row__text">
+        <Text as="span" variant="label">
+          {label}
         </Text>
-      ) : null}
+        <Text as="span" variant="caption" tone="muted">
+          {description}
+        </Text>
+      </span>
+      <button
+        aria-checked={isOn}
+        aria-label={`${label}: ${isOn ? "zapnuto" : "vypnuto"}`}
+        className={`notification-switch${isOn ? " is-on" : ""}`}
+        disabled={disabled}
+        onClick={onToggle}
+        role="switch"
+        type="button"
+      >
+        <span className="notification-switch__thumb" />
+      </button>
     </div>
   );
 }

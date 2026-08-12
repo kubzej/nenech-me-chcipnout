@@ -9,10 +9,14 @@ export type Workspace = {
 export type MeResponse = {
   user_id: string;
   email: string | null;
+  display_name: string | null;
+};
+
+export type MeUpdateRequest = {
+  display_name: string;
 };
 
 export type WorkspaceMemberItem = {
   user_id: string;
   display_name: string | null;
 };
-

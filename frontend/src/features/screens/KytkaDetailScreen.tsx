@@ -501,80 +501,97 @@ export function KytkaDetailScreen({
         ) : null}
 
         {timeline.length > 0 ? (
-          <div className="entity-list">
-            {timeline.map((entry) =>
-              entry.kind === "event" ? (
-                <div className="entity-card kytka-detail__event-row" key={entry.key}>
+          <div className="kytka-detail__timeline">
+            {timeline.map((entry) => {
+              if (entry.kind === "event") {
+                const EventIcon = EVENT_TYPE_ICONS[entry.event.event_type] ?? Droplets;
+                const detail = formatEventDetail(entry.event);
+                const recordedByCurrentUser = entry.event.recorded_by === me?.user_id;
+
+                return (
+                  <div className="kytka-detail__timeline-item" key={entry.key}>
+                    <div
+                      className={`kytka-detail__timeline-marker kytka-detail__timeline-marker--${entry.event.event_type}`}
+                    >
+                      <EventIcon aria-hidden="true" size={16} />
+                    </div>
+                    <div className="entity-card kytka-detail__timeline-card">
+                      <button
+                        className="kytka-detail__timeline-main"
+                        onClick={() => openEditEventSheet(entry.event)}
+                        type="button"
+                      >
+                        <span className="kytka-detail__timeline-meta">
+                          <Text as="span" tone="muted" variant="caption">
+                            {formatEventDateTime(entry.event.occurred_at)}
+                          </Text>
+                          {!recordedByCurrentUser ? (
+                            <Text as="span" tone="muted" variant="caption">
+                              {memberLabel(entry.event.recorded_by)}
+                            </Text>
+                          ) : null}
+                        </span>
+                        <Text as="span" variant="title">
+                          {formatEventType(entry.event.event_type)}
+                        </Text>
+                        {detail ? (
+                          <Text as="span" tone="muted" variant="caption">
+                            {detail}
+                          </Text>
+                        ) : null}
+                      </button>
+                      {entry.photo ? (
+                        <button
+                          className="kytka-detail__timeline-thumb"
+                          onClick={() => setViewingPhoto(entry.photo)}
+                          type="button"
+                        >
+                          <PlantAvatar
+                            bucket={entry.photo.storage_bucket}
+                            label="Foto"
+                            path={entry.photo.storage_path}
+                            size="sm"
+                          />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="kytka-detail__timeline-item" key={entry.key}>
+                  <div className="kytka-detail__timeline-marker kytka-detail__timeline-marker--photo">
+                    <ImageIcon aria-hidden="true" size={16} />
+                  </div>
                   <button
-                    className="kytka-detail__event-row-main"
-                    onClick={() => openEditEventSheet(entry.event)}
+                    className="entity-card kytka-detail__timeline-card kytka-detail__timeline-card--photo"
+                    onClick={() => setViewingPhoto(entry.photo)}
                     type="button"
                   >
-                    <div className="kytka-detail__event-row-title">
-                      {(() => {
-                        const EventIcon =
-                          EVENT_TYPE_ICONS[entry.event.event_type] ?? Droplets;
-                        return <EventIcon aria-hidden="true" size={18} />;
-                      })()}
-                      <Text as="span" variant="title">
-                        {formatEventType(entry.event.event_type)}
-                      </Text>
-                    </div>
-                    <Text as="span" tone="muted" variant="caption">
-                      {formatEventDateTime(entry.event.occurred_at)} ·{" "}
-                      {memberLabel(entry.event.recorded_by)}
-                    </Text>
-                    {formatEventDetail(entry.event) ? (
+                    <span className="kytka-detail__timeline-main">
                       <Text as="span" tone="muted" variant="caption">
-                        {formatEventDetail(entry.event)}
+                        {formatEventDateTime(entry.timestamp)}
                       </Text>
-                    ) : null}
+                      <Text as="span" variant="title">
+                        Fotka
+                      </Text>
+                      {entry.photo.note ? (
+                        <Text as="span" tone="muted" variant="caption">
+                          {entry.photo.note}
+                        </Text>
+                      ) : null}
+                    </span>
+                    <PlantAvatar
+                      bucket={entry.photo.storage_bucket}
+                      label="Foto"
+                      path={entry.photo.storage_path}
+                      size="sm"
+                    />
                   </button>
-                  {entry.photo ? (
-                    <button
-                      className="kytka-detail__event-thumb"
-                      onClick={() => setViewingPhoto(entry.photo)}
-                      type="button"
-                    >
-                      <PlantAvatar
-                        bucket={entry.photo.storage_bucket}
-                        label="Foto"
-                        path={entry.photo.storage_path}
-                        size="sm"
-                      />
-                    </button>
-                  ) : null}
                 </div>
-              ) : (
-                <button
-                  className="entity-card kytka-detail__event-row kytka-detail__event-row--photo"
-                  key={entry.key}
-                  onClick={() => setViewingPhoto(entry.photo)}
-                  type="button"
-                >
-                  <div className="kytka-detail__event-row-title">
-                    <ImageIcon aria-hidden="true" size={18} />
-                    <Text as="span" variant="title">
-                      Fotka
-                    </Text>
-                  </div>
-                  <Text as="span" tone="muted" variant="caption">
-                    {formatEventDateTime(entry.timestamp)}
-                  </Text>
-                  {entry.photo.note ? (
-                    <Text as="span" tone="muted" variant="caption">
-                      {entry.photo.note}
-                    </Text>
-                  ) : null}
-                  <PlantAvatar
-                    bucket={entry.photo.storage_bucket}
-                    label="Foto"
-                    path={entry.photo.storage_path}
-                    size="sm"
-                  />
-                </button>
-              ),
-            )}
+              );
+            })}
           </div>
         ) : null}
       </div>

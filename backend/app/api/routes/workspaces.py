@@ -9,6 +9,7 @@ from app.core.supabase_rest import (
 )
 from app.schemas.workspaces import (
     MeResponse,
+    MeUpdateRequest,
     WorkspaceMemberItem,
     WorkspaceResponse,
 )
@@ -19,7 +20,44 @@ router = APIRouter(prefix="/api", tags=["workspace"])
 
 @router.get("/me", response_model=MeResponse)
 async def me(current_user: CurrentUser = Depends(get_current_user)) -> MeResponse:
-    return MeResponse(user_id=current_user.user_id, email=current_user.email)
+    display_name = await _get_display_name(current_user)
+    return MeResponse(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        display_name=display_name,
+    )
+
+
+@router.patch("/me", response_model=MeResponse)
+async def update_me(
+    payload: MeUpdateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MeResponse:
+    headers = {
+        **supabase_user_headers(current_user.access_token),
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=representation",
+    }
+
+    async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
+        response = await client.post(
+            "/profiles",
+            headers=headers,
+            params={"on_conflict": "user_id"},
+            json={
+                "user_id": str(current_user.user_id),
+                "display_name": payload.display_name,
+            },
+        )
+        raise_supabase_error(response)
+        rows = response.json()
+
+    display_name = rows[0]["display_name"] if rows else payload.display_name
+    return MeResponse(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        display_name=display_name,
+    )
 
 
 @router.get("/workspaces/active", response_model=WorkspaceResponse)
@@ -94,3 +132,25 @@ async def bootstrap_workspace(
         status_code=status.HTTP_410_GONE,
         detail="Workspace bootstrap is manual in this private app",
     )
+
+
+async def _get_display_name(current_user: CurrentUser) -> str | None:
+    headers = supabase_user_headers(current_user.access_token)
+    async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
+        response = await client.get(
+            "/profiles",
+            headers=headers,
+            params={
+                "select": "display_name",
+                "user_id": f"eq.{current_user.user_id}",
+                "limit": "1",
+            },
+        )
+        raise_supabase_error(response)
+
+    rows = response.json()
+    if not rows:
+        return None
+
+    display_name = rows[0].get("display_name")
+    return str(display_name) if display_name is not None else None

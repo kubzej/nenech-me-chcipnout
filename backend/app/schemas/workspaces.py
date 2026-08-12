@@ -7,6 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class MeResponse(BaseModel):
     user_id: UUID
     email: str | None
+    display_name: str | None
+
+
+class MeUpdateRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("display_name")
+    @classmethod
+    def strip_display_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Must not be empty")
+
+        return stripped
 
 
 class WorkspaceBootstrapRequest(BaseModel):

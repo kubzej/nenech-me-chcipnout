@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Droplets, Leaf, Plus } from "lucide-react";
+import { Leaf, Plus } from "lucide-react";
 import { KytkaDetailScreen } from "./KytkaDetailScreen";
 import { PlantAvatar } from "../../components/avatar/PlantAvatar";
 import { Button } from "../../components/ui/Button";
@@ -18,7 +18,6 @@ import {
   apiPatchAuthed,
   apiPostAuthed,
 } from "../../lib/api";
-import { isWateredToday } from "../../lib/relativeDays";
 import type { CareProfileItem } from "../../types/care-profile";
 import type { KytkaCreateRequest, KytkaListItem } from "../../types/kytka";
 import type { ContainerListItem } from "../../types/place";
@@ -41,8 +40,6 @@ export function PlantsScreen() {
   const [acquiredOn, setAcquiredOn] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedKytkaId, setSelectedKytkaId] = useState<string | null>(null);
-  const [wateringId, setWateringId] = useState<string | null>(null);
-  const [justWateredId, setJustWateredId] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
 
   const loadData = useCallback(async (options: { showLoading?: boolean } = {}) => {
@@ -162,31 +159,6 @@ export function PlantsScreen() {
           ? deleteError.message
           : "Kytku se nepodařilo smazat.",
       );
-    }
-  }
-
-  async function handleZalito(kytka: KytkaListItem) {
-    setError(null);
-    setWateringId(kytka.id);
-
-    try {
-      await apiPostAuthed("/api/care-events", {
-        kytka_id: kytka.id,
-        event_type: "watering",
-      });
-      await loadData({ showLoading: false });
-      setJustWateredId(kytka.id);
-      setTimeout(() => {
-        setJustWateredId((current) => (current === kytka.id ? null : current));
-      }, 2000);
-    } catch (zalitoError) {
-      setError(
-        zalitoError instanceof Error
-          ? zalitoError.message
-          : "Zalití se nepodařilo uložit.",
-      );
-    } finally {
-      setWateringId(null);
     }
   }
 
@@ -361,17 +333,6 @@ export function PlantsScreen() {
                   </div>
                 </div>
               </button>
-              <div className="kytka-list__item-footer">
-                <Button
-                  disabled={wateringId === kytka.id}
-                  icon={<Droplets aria-hidden="true" size={16} />}
-                  onClick={() => handleZalito(kytka)}
-                  type="button"
-                  variant="ghost"
-                >
-                  {wateringButtonLabel(kytka, wateringId, justWateredId)}
-                </Button>
-              </div>
             </article>
           ))}
         </div>
@@ -386,23 +347,6 @@ export function PlantsScreen() {
       ) : null}
     </section>
   );
-}
-
-function wateringButtonLabel(
-  kytka: KytkaListItem,
-  wateringId: string | null,
-  justWateredId: string | null,
-): string {
-  if (wateringId === kytka.id) {
-    return "Ukládám...";
-  }
-  if (justWateredId === kytka.id) {
-    return "Zalito!";
-  }
-  if (isWateredToday(kytka.last_watered_at)) {
-    return "Zalito dnes";
-  }
-  return "Zalít";
 }
 
 function formatStatus(status: string) {
