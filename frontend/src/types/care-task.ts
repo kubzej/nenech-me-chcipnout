@@ -18,6 +18,11 @@ export type CareTaskStatus =
 
 export type CareTaskPriority = "low" | "normal" | "high" | "critical";
 
+export type CareTaskCopySection = {
+  kind: "info" | "action" | "method" | "weather" | "departure";
+  text: string;
+};
+
 export type CareTaskItem = {
   id: string;
   task_date: string;
@@ -36,6 +41,7 @@ export type CareTaskItem = {
   completed_by: string | null;
   completed_at: string | null;
   outcome_note: string | null;
+  copy_sections: CareTaskCopySection[];
   created_at: string;
 };
 

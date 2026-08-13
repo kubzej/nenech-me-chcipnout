@@ -28,6 +28,13 @@ CareTaskStatus = Literal[
 
 CareTaskPriority = Literal["low", "normal", "high", "critical"]
 
+CareTaskCopySectionKind = Literal["info", "action", "method", "weather", "departure"]
+
+
+class CareTaskCopySection(BaseModel):
+    kind: CareTaskCopySectionKind
+    text: str
+
 
 class CareTaskItem(BaseModel):
     id: UUID
@@ -47,6 +54,7 @@ class CareTaskItem(BaseModel):
     completed_by: UUID | None
     completed_at: datetime | None
     outcome_note: str | None
+    copy_sections: list[CareTaskCopySection] = Field(default_factory=list)
     created_at: datetime
 
 

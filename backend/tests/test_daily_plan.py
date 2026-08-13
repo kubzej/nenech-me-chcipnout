@@ -1,9 +1,16 @@
 from datetime import date, timedelta
 
 from app.services.daily_plan import (
+    _checkin_copy_sections,
+    _fertilizing_copy_sections,
     _heat_context,
     _heat_pull_forward_context,
+    _heat_watering_note,
+    _pest_followup_copy_sections,
     _rain_delay_context,
+    _watering_copy_sections,
+    _watering_explanation,
+    _weather_protection_copy_sections,
 )
 
 
@@ -142,3 +149,65 @@ def test_rain_delay_context_ignores_rain_starting_after_tomorrow() -> None:
     ]
 
     assert _rain_delay_context("full", forecast, today) is None
+
+
+def test_watering_explanation_stays_practical() -> None:
+    assert (
+        _watering_explanation(
+            days_since=2,
+            is_dormant=False,
+        )
+        == "Poslední zálivka před 2 dny."
+    )
+
+
+def test_watering_copy_sections_stay_card_sized() -> None:
+    assert _watering_copy_sections(days_since=None, is_dormant=False) == [
+        {"kind": "info", "text": "Zálivka zatím není zaznamenaná."}
+    ]
+
+
+def test_heat_watering_note_formats_short_heatwave() -> None:
+    assert _heat_watering_note(
+        {
+            "forecast_temp_max_c": 35.9,
+            "heat_sensitive_above_c": 30.0,
+            "heatwave_days": 3,
+            "heatwave_starts_in_days": 1,
+        },
+        pulled_forward_by_heat=True,
+    ) == (
+        "Od zítřka bude 3 dny horko až 35.9 °C. "
+        "Zálivka je proto posunutá dopředu. Zalij ráno nebo večer."
+    )
+
+
+def test_fertilizing_copy_sections_stay_practical() -> None:
+    assert _fertilizing_copy_sections(14) == [
+        {"kind": "info", "text": "Poslední hnojení před 14 dny."}
+    ]
+
+
+def test_checkin_copy_sections_split_reason_and_action() -> None:
+    assert _checkin_copy_sections(7, is_sick_or_monitoring=False) == [
+        {"kind": "info", "text": "Poslední kontrola před 7 dny."},
+        {"kind": "action", "text": "Zkontroluj listy, substrát a celkový stav."},
+    ]
+
+
+def test_pest_followup_copy_sections_split_reason_and_action() -> None:
+    assert _pest_followup_copy_sections(5) == [
+        {"kind": "info", "text": "Škůdci zaznamenaní před 5 dny."},
+        {"kind": "action", "text": "Zkontroluj, jestli se nešíří nebo nevrátili."},
+    ]
+
+
+def test_weather_protection_copy_sections_split_weather_threshold_and_action() -> None:
+    assert _weather_protection_copy_sections("heat", 34.2, 30) == [
+        {"kind": "weather", "text": "Dnes bude 34.2 °C."},
+        {
+            "kind": "info",
+            "text": "Práh citlivosti profilu je 30 °C pro horko.",
+        },
+        {"kind": "action", "text": "Dej ji do stínu a zkontroluj zálivku."},
+    ]

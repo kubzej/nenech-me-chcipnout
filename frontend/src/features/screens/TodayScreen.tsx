@@ -33,6 +33,7 @@ import { DAILY_SERGEANT_MESSAGES } from "../today/dailySergeantMessages";
 import type { CareEventCondition, CareEventCreateRequest } from "../../types/care-event";
 import type {
   ActiveAbsenceItem,
+  CareTaskCopySection,
   CareTaskCompleteGroupResponse,
   CareTaskCompleteRequest,
   CareTaskItem,
@@ -615,12 +616,11 @@ function TaskCard({
       names.length > 1
         ? firstKytka?.container_name ?? names.join(", ")
         : names[0] ?? group.tasks[0]?.title ?? TASK_TYPE_LABELS[group.taskType];
-    const isHighPriority = group.tasks.some(
-      (task) => task.priority === "high" || task.priority === "critical",
-    );
+    const isCritical = group.tasks.some((task) => task.priority === "critical");
     const explanation = group.tasks[0]?.explanation ?? null;
     const instructions =
       group.tasks.find((task) => task.instructions)?.instructions ?? null;
+    const copySections = group.tasks[0]?.copy_sections ?? [];
     const taskIds = group.tasks.map((task) => task.id);
 
     return (
@@ -638,25 +638,16 @@ function TaskCard({
             <div>
               <div className="kytka-detail__event-row-title">
                 <Icon aria-hidden="true" size={18} />
-                <Text as="span" variant="title" tone={isHighPriority ? "danger" : "default"}>
+                <Text as="span" variant="title" tone={isCritical ? "danger" : "default"}>
                   {targetLabel}
                 </Text>
               </div>
-              {explanation ? (
-                <Text as="p" variant="body" tone="muted">
-                  {explanation}
-                </Text>
-              ) : null}
-              {instructions ? (
-                <Text
-                  as="p"
-                  variant="caption"
-                  tone={isHighPriority ? "danger" : "muted"}
-                  className="today-task__instructions"
-                >
-                  {instructions}
-                </Text>
-              ) : null}
+              <TaskCopy
+                fallback={explanation}
+                instructions={instructions}
+                isCritical={isCritical}
+                sections={copySections}
+              />
               {names.length > 1 ? (
                 <Text as="p" variant="caption" tone="muted" className="today-task__names">
                   {names.join(", ")}
@@ -686,7 +677,7 @@ function TaskCard({
 
   const task = group.task;
   const kytka = task.kytka_id ? kytkaById.get(task.kytka_id) : null;
-  const isHighPriority = task.priority === "high" || task.priority === "critical";
+  const isCritical = task.priority === "critical";
 
   return (
     <article className="entity-card kytka-list__item">
@@ -703,23 +694,16 @@ function TaskCard({
           <div>
             <div className="kytka-detail__event-row-title">
               <Icon aria-hidden="true" size={18} />
-              <Text as="span" variant="title" tone={isHighPriority ? "danger" : "default"}>
+              <Text as="span" variant="title" tone={isCritical ? "danger" : "default"}>
                 {kytka?.display_name ?? task.title}
               </Text>
             </div>
-            <Text as="p" variant="body" tone="muted">
-              {task.explanation ?? TASK_TYPE_LABELS[task.task_type]}
-            </Text>
-            {task.instructions ? (
-              <Text
-                as="p"
-                variant="caption"
-                tone={isHighPriority ? "danger" : "muted"}
-                className="today-task__instructions"
-              >
-                {task.instructions}
-              </Text>
-            ) : null}
+            <TaskCopy
+              fallback={task.explanation ?? TASK_TYPE_LABELS[task.task_type]}
+              instructions={task.instructions}
+              isCritical={isCritical}
+              sections={task.copy_sections}
+            />
           </div>
         </div>
         <div className="kytka-detail__header-actions-group">
@@ -746,6 +730,76 @@ function TaskCard({
       </div>
     </article>
   );
+}
+
+type TaskCopyProps = {
+  fallback: string | null;
+  instructions: string | null;
+  isCritical: boolean;
+  sections: CareTaskCopySection[];
+};
+
+function TaskCopy({
+  fallback,
+  instructions,
+  isCritical,
+  sections,
+}: TaskCopyProps) {
+  const displaySections =
+    sections.length > 0
+      ? sections
+      : fallback
+        ? [{ kind: "info" as const, text: fallback }]
+        : [];
+  const rows = instructions
+    ? [
+        ...displaySections,
+        { kind: "tip" as const, text: instructions },
+      ]
+    : displaySections;
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="today-task__copy">
+      {rows.map((section, index) => (
+        <Text
+          as="p"
+          className={`today-task__copy-line today-task__copy-line--${section.kind}`}
+          key={`${section.kind}-${index}`}
+          tone={
+            isCritical && (section.kind === "weather" || section.kind === "departure")
+              ? "danger"
+              : "muted"
+          }
+          variant="caption"
+        >
+          <span className="today-task__copy-label">{taskCopyLabel(section.kind)}</span>
+          <span className="today-task__copy-text">{section.text}</span>
+        </Text>
+      ))}
+    </div>
+  );
+}
+
+function taskCopyLabel(sectionKind: CareTaskCopySection["kind"] | "tip"): string {
+  switch (sectionKind) {
+    case "action":
+      return "Co teď";
+    case "departure":
+      return "Odjezd";
+    case "method":
+      return "Jak";
+    case "tip":
+      return "Tip";
+    case "weather":
+      return "Počasí";
+    case "info":
+    default:
+      return "Důvod";
+  }
 }
 
 type RecoveryCheckinFieldsProps = {

@@ -33,7 +33,9 @@ _FERTILIZING_FALLBACK_HINT = (
 _TASK_SELECT = (
     "id,task_date,task_type,target_type,kytka_id,container_id,status,priority,"
     "source,title,instructions,explanation,recommended_amount_ml,due_at,"
-    "completed_by,completed_at,outcome_note,alerted_at,created_at"
+    "completed_by,completed_at,outcome_note,alerted_at,recommendation_json,"
+    "kytky(care_profiles(survival_watering_hint,survival_heat_hint,"
+    "survival_frost_hint,survival_fertilizing_hint)),created_at"
 )
 
 
@@ -663,20 +665,27 @@ async def _generate_for_kytka(
 
         if due:
             water_amount = profile.get("default_water_amount_ml")
-            watering_method = profile.get("watering_method")
-            explanation = _watering_explanation(
-                watering_days_since, is_dormant, water_amount, watering_method
-            )
+            copy_sections = _watering_copy_sections(watering_days_since, is_dormant)
             heat_note_context = heat_context or (
                 heat_pull_context if pulled_forward_by_heat else None
             )
             if heat_note_context is not None:
-                explanation += _heat_watering_note(
-                    heat_note_context, pulled_forward_by_heat
+                copy_sections.append(
+                    {
+                        "kind": "weather",
+                        "text": _heat_watering_note(
+                            heat_note_context, pulled_forward_by_heat
+                        ),
+                    }
                 )
             if departure is not None:
-                explanation += " " + _departure_note(
-                    departure, today, effective_max, pulled_forward
+                copy_sections.append(
+                    {
+                        "kind": "departure",
+                        "text": _departure_note(
+                            departure, today, effective_max, pulled_forward
+                        ),
+                    }
                 )
             recommendation_json = {
                 "profile_interval_days": [min_days, max_days],
@@ -689,6 +698,7 @@ async def _generate_for_kytka(
                 "rain_delay_days": rain_delay_days,
                 "kytka_status_modifier": "dormant" if is_dormant else None,
                 "pulled_forward_for_departure": pulled_forward,
+                "copy_sections": copy_sections,
             }
             if rain_delay_context is not None:
                 recommendation_json.update(
@@ -732,7 +742,7 @@ async def _generate_for_kytka(
                 priority=priority,
                 title="Zalít",
                 instructions=_profile_hint(profile, "survival_watering_hint"),
-                explanation=explanation,
+                explanation=_join_copy_sections(copy_sections),
                 recommended_amount_ml=water_amount,
                 recommendation_json=recommendation_json,
                 existing_statuses=existing_statuses,
@@ -762,16 +772,7 @@ async def _generate_for_kytka(
                 else (today - kytka_created_on).days
             )
             if gating_days_since >= interval:
-                if days_since is not None:
-                    fertilizing_explanation = (
-                        f"Poslední hnojení před {days_since} dny. Hlady "
-                        f"neumírá, ale nálada by šla zlepšit."
-                    )
-                else:
-                    fertilizing_explanation = (
-                        "Nikdy jsi ji nehnojil. Roste na charisma — "
-                        "jak dlouho myslíš, že to vydrží?"
-                    )
+                copy_sections = _fertilizing_copy_sections(days_since)
 
                 await _upsert_task(
                     client,
@@ -788,10 +789,11 @@ async def _generate_for_kytka(
                         profile, "survival_fertilizing_hint"
                     )
                     or _FERTILIZING_FALLBACK_HINT,
-                    explanation=fertilizing_explanation,
+                    explanation=_join_copy_sections(copy_sections),
                     recommendation_json={
                         "feeding_interval_days": interval,
                         "days_since_last_event": days_since,
+                        "copy_sections": copy_sections,
                     },
                     existing_statuses=existing_statuses,
                 )
@@ -810,6 +812,7 @@ async def _generate_for_kytka(
             days_since if days_since is not None else (today - kytka_created_on).days
         )
         if gating_days_since >= effective_check:
+            copy_sections = _checkin_copy_sections(days_since, is_sick_or_monitoring)
             await _upsert_task(
                 client,
                 headers,
@@ -821,18 +824,11 @@ async def _generate_for_kytka(
                 task_date=today,
                 priority=priority,
                 title="Zkontrolovat",
-                explanation=(
-                    "Mrkni na ni, jestli náhodou nezačíná vypadat "
-                    "jako tvoje priorita číslo 47."
-                )
-                if not is_sick_or_monitoring
-                else (
-                    "Je pod dohledem. Mrkni, jestli je lepší, stejná, "
-                    "nebo horší."
-                ),
+                explanation=_join_copy_sections(copy_sections),
                 recommendation_json={
                     "check_interval_days": effective_check,
                     "days_since_last_event": days_since,
+                    "copy_sections": copy_sections,
                 },
                 existing_statuses=existing_statuses,
             )
@@ -843,6 +839,7 @@ async def _generate_for_kytka(
     if pest_interval and last_pest_observation:
         days_since = (today - last_pest_observation.date()).days
         if days_since >= pest_interval:
+            copy_sections = _pest_followup_copy_sections(days_since)
             await _upsert_task(
                 client,
                 headers,
@@ -854,13 +851,11 @@ async def _generate_for_kytka(
                 task_date=today,
                 priority=priority,
                 title="Zkontrolovat škůdce",
-                explanation=(
-                    f"Před {days_since} dny sis všiml škůdců. Jestli sis "
-                    f"myslel, že zmizí samy, mrkni, jak to dopadlo."
-                ),
+                explanation=_join_copy_sections(copy_sections),
                 recommendation_json={
                     "pest_check_interval_days": pest_interval,
                     "days_since_last_event": days_since,
+                    "copy_sections": copy_sections,
                 },
                 existing_statuses=existing_statuses,
             )
@@ -874,6 +869,7 @@ async def _generate_for_kytka(
             days_since if days_since is not None else (today - kytka_created_on).days
         )
         if gating_days_since >= photo_interval:
+            copy_sections = _photo_copy_sections(days_since)
             await _upsert_task(
                 client,
                 headers,
@@ -885,12 +881,11 @@ async def _generate_for_kytka(
                 task_date=today,
                 priority="low",
                 title="Vyfotit",
-                explanation=(
-                    "Vyfoť ji do historie, ať máš s čím porovnávat později."
-                ),
+                explanation=_join_copy_sections(copy_sections),
                 recommendation_json={
                     "photo_interval_days": photo_interval,
                     "days_since_last_event": days_since,
+                    "copy_sections": copy_sections,
                 },
                 existing_statuses=existing_statuses,
             )
@@ -907,10 +902,7 @@ async def _generate_for_kytka(
         )
         if gating_days_since >= maintenance_interval:
             notes = profile.get("maintenance_notes")
-            explanation = notes if notes else (
-                "Čas na údržbu. Prořezat, přesadit, otočit — "
-                "něco z toho určitě dlužíš."
-            )
+            copy_sections = _maintenance_copy_sections(days_since, notes)
             await _upsert_task(
                 client,
                 headers,
@@ -922,10 +914,11 @@ async def _generate_for_kytka(
                 task_date=today,
                 priority="low",
                 title="Údržba",
-                explanation=explanation,
+                explanation=_join_copy_sections(copy_sections),
                 recommendation_json={
                     "maintenance_interval_days": maintenance_interval,
                     "days_since_last_event": days_since,
+                    "copy_sections": copy_sections,
                 },
                 existing_statuses=existing_statuses,
             )
@@ -948,6 +941,9 @@ async def _generate_for_kytka(
         heat_risk = heat_context is not None
 
         if frost_risk:
+            copy_sections = _weather_protection_copy_sections(
+                "frost", temp_min, cold_threshold
+            )
             await _upsert_task(
                 client,
                 headers,
@@ -960,17 +956,18 @@ async def _generate_for_kytka(
                 priority="high",
                 title="Ochránit před mrazem",
                 instructions=_profile_hint(profile, "survival_frost_hint"),
-                explanation=(
-                    f"Dnes bude {temp_min} °C. Mráz jí nedělá dobře — "
-                    f"dej ji dovnitř, nebo ji aspoň něčím přikryj."
-                ),
+                explanation=_join_copy_sections(copy_sections),
                 recommendation_json={
                     "forecast_temp_min_c": temp_min,
                     "cold_sensitive_below_c": cold_threshold,
+                    "copy_sections": copy_sections,
                 },
                 existing_statuses=existing_statuses,
             )
         elif heat_risk:
+            copy_sections = _weather_protection_copy_sections(
+                "heat", temp_max, heat_threshold
+            )
             await _upsert_task(
                 client,
                 headers,
@@ -983,13 +980,11 @@ async def _generate_for_kytka(
                 priority="high",
                 title="Ochránit před horkem",
                 instructions=_profile_hint(profile, "survival_heat_hint"),
-                explanation=(
-                    f"Dnes bude {temp_max} °C. To už není opalování, "
-                    f"to je poprava — stín, nebo pořádná zálivka."
-                ),
+                explanation=_join_copy_sections(copy_sections),
                 recommendation_json={
                     "forecast_temp_max_c": temp_max,
                     "heat_sensitive_above_c": heat_threshold,
+                    "copy_sections": copy_sections,
                 },
                 existing_statuses=existing_statuses,
             )
@@ -1164,47 +1159,160 @@ def _heat_watering_note(
     heatwave_starts_in_days = heat_context.get("heatwave_starts_in_days")
     if pulled_forward_by_heat:
         if isinstance(heatwave_days, int) and heatwave_days > 1:
+            heatwave_length = _format_day_count(heatwave_days)
             if heatwave_starts_in_days == 0:
                 return (
-                    f" Čeká nás {heatwave_days} dní horka až {temp_max:g} °C, "
-                    "takže tahám zálivku dopředu. Zalij ráno nebo večer."
+                    f"Čeká nás {heatwave_length} horka až {temp_max:g} °C. "
+                    "Zálivka je proto posunutá dopředu. Zalij ráno nebo večer."
                 )
             return (
-                f" Od zítřka má přijít {heatwave_days} dní horka až {temp_max:g} °C, "
-                "takže tahám zálivku dopředu. Zalij ráno nebo večer."
+                f"Od zítřka bude {heatwave_length} horko až {temp_max:g} °C. "
+                "Zálivka je proto posunutá dopředu. Zalij ráno nebo večer."
             )
         return (
-            f" Dnes má být {temp_max:g} °C, takže tahám zálivku o den dopředu. "
-            "Zalij ráno nebo večer, ne v poledním grilu."
+            f"Dnes má být {temp_max:g} °C. Zálivka je proto posunutá o den "
+            "dopředu. Zalij ráno nebo večer."
         )
 
-    return (
-        f" Dnes má být {temp_max:g} °C. Zalij ráno nebo večer, "
-        "ať z toho není parní lázeň."
-    )
+    return f"Dnes má být {temp_max:g} °C. Zalij ráno nebo večer."
+
+
+def _watering_copy_sections(
+    days_since: int | None,
+    is_dormant: bool,
+) -> list[dict[str, str]]:
+    return [{"kind": "info", "text": _watering_reason(days_since, is_dormant)}]
 
 
 def _watering_explanation(
     days_since: int | None,
     is_dormant: bool,
-    amount_ml: int | None,
-    method: str | None,
 ) -> str:
-    dormant_note = " Má klidové období — netřeba víc." if is_dormant else ""
-    how = ""
-    if amount_ml:
-        how += f" Asi {amount_ml} ml."
-    if method:
-        how += f" Metoda: {method}."
+    return _join_copy_sections(_watering_copy_sections(days_since, is_dormant))
+
+
+def _watering_reason(days_since: int | None, is_dormant: bool) -> str:
+    dormant_note = " Má klidové období - netřeba víc." if is_dormant else ""
     if days_since is None:
-        return (
-            f"Ještě jsi ji ani jednou nezalil. Na to nejsi "
-            f"hrdý, doufám.{how}{dormant_note}"
+        return f"Zálivka zatím není zaznamenaná.{dormant_note}"
+    return f"Poslední zálivka před {_format_days_ago(days_since)}.{dormant_note}"
+
+
+def _fertilizing_copy_sections(days_since: int | None) -> list[dict[str, str]]:
+    if days_since is None:
+        return [{"kind": "info", "text": "Hnojení zatím není zaznamenané."}]
+    return [
+        {
+            "kind": "info",
+            "text": f"Poslední hnojení před {_format_days_ago(days_since)}.",
+        }
+    ]
+
+
+def _checkin_copy_sections(
+    days_since: int | None, is_sick_or_monitoring: bool
+) -> list[dict[str, str]]:
+    if is_sick_or_monitoring:
+        sections = [{"kind": "info", "text": "Je pod dohledem."}]
+        sections.append(
+            {
+                "kind": "action",
+                "text": "Mrkni, jestli je lepší, stejná, nebo horší.",
+            }
         )
-    return (
-        f"Poslední zálivka před {days_since} dny. Myslíš, "
-        f"že se zalévá sama?{how}{dormant_note}"
-    )
+        return sections
+
+    if days_since is None:
+        reason = "Kontrola stavu zatím není zaznamenaná."
+    else:
+        reason = f"Poslední kontrola před {_format_days_ago(days_since)}."
+    return [
+        {"kind": "info", "text": reason},
+        {"kind": "action", "text": "Zkontroluj listy, substrát a celkový stav."},
+    ]
+
+
+def _pest_followup_copy_sections(days_since: int) -> list[dict[str, str]]:
+    return [
+        {
+            "kind": "info",
+            "text": f"Škůdci zaznamenaní před {_format_days_ago(days_since)}.",
+        },
+        {"kind": "action", "text": "Zkontroluj, jestli se nešíří nebo nevrátili."},
+    ]
+
+
+def _photo_copy_sections(days_since: int | None) -> list[dict[str, str]]:
+    if days_since is None:
+        reason = "Fotka do historie zatím není zaznamenaná."
+    else:
+        reason = f"Poslední fotka před {_format_days_ago(days_since)}."
+    return [
+        {"kind": "info", "text": reason},
+        {"kind": "action", "text": "Vyfoť ji pro porovnání později."},
+    ]
+
+
+def _maintenance_copy_sections(
+    days_since: int | None, notes: object
+) -> list[dict[str, str]]:
+    if days_since is None:
+        reason = "Údržba zatím není zaznamenaná."
+    else:
+        reason = f"Poslední údržba před {_format_days_ago(days_since)}."
+
+    action = notes.strip() if isinstance(notes, str) and notes.strip() else None
+    return [
+        {"kind": "info", "text": reason},
+        {
+            "kind": "action",
+            "text": action or "Prořež, přesaď nebo otoč podle stavu.",
+        },
+    ]
+
+
+def _weather_protection_copy_sections(
+    risk: str, forecast_temp_c: object, threshold_c: object
+) -> list[dict[str, str]]:
+    if risk == "frost":
+        weather = f"Dnes bude {float(forecast_temp_c):g} °C."
+        action = "Dej ji dovnitř, nebo ji aspoň přikryj."
+    else:
+        weather = f"Dnes bude {float(forecast_temp_c):g} °C."
+        action = "Dej ji do stínu a zkontroluj zálivku."
+
+    sections = [{"kind": "weather", "text": weather}]
+    if isinstance(threshold_c, int | float):
+        label = "mráz/chlad" if risk == "frost" else "horko"
+        sections.append(
+            {
+                "kind": "info",
+                "text": (
+                    f"Práh citlivosti profilu je {float(threshold_c):g} °C "
+                    f"pro {label}."
+                ),
+            }
+        )
+    sections.append({"kind": "action", "text": action})
+    return sections
+
+
+def _join_copy_sections(sections: list[dict[str, str]]) -> str:
+    return " ".join(section["text"] for section in sections if section.get("text"))
+
+
+def _format_day_count(days: int) -> str:
+    if days == 1:
+        return "1 den"
+    if 2 <= days <= 4:
+        return f"{days} dny"
+    return f"{days} dní"
+
+
+def _format_days_ago(days: int) -> str:
+    if days == 1:
+        return "1 dnem"
+    return f"{days} dny"
 
 
 def _is_active_feeding_month(feeding_months: list[int] | None, today: date) -> bool:
@@ -1323,6 +1431,19 @@ async def _upsert_task(
         "recommendation_json": recommendation_json,
         "generated_key": generated_key,
     }
+
+    if current_status == "pending":
+        response = await client.patch(
+            "/care_tasks",
+            headers={**headers, "Content-Type": "application/json"},
+            params={
+                "workspace_id": f"eq.{workspace_id}",
+                "generated_key": f"eq.{generated_key}",
+            },
+            json=row,
+        )
+        raise_supabase_error(response)
+        return
 
     response = await client.post(
         "/care_tasks",
