@@ -19,12 +19,9 @@ Two request-time header shapes are used with Supabase PostgREST:
   that serves a frontend request. RLS policies key off `auth.uid()`, so a
   user can only see/write what their own row-level policies allow.
 - `supabase_service_headers()` — service-role key, bypasses RLS entirely.
-  Used only in two narrow places: the cron job scripts (`app/jobs/*`, which
-  run with no logged-in user and need to act across every workspace member),
-  and the push-notification side effect inside `kytka_status.py` (a regular
-  user's JWT can only read their own `push_subscriptions`, not their
-  partner's, so notifying the other workspace member needs elevated access
-  even though it's triggered from an otherwise normal user request).
+  Used only by offline/background jobs such as the cron job scripts
+  (`app/jobs/*`), which run with no logged-in user and need to act across
+  every workspace member.
 
 RLS bypass via service role does **not** imply table grants — Postgres GRANTs
 are a separate permission layer. `service_role` has its own grants migration
@@ -100,20 +97,15 @@ buttons like "Zalito dnes".
 - Frontend service worker uses the `injectManifest` `vite-plugin-pwa`
   strategy (not the default `generateSW`) specifically so it can hand-write
   `push`/`notificationclick` listeners (`frontend/src/sw-push.ts`).
-- Two notification shapes, deliberately different mechanisms:
-  - **Daily digest** — cron-triggered (`app/jobs/runner.py daily-digest`),
-    runs frequently (~every 15 min) and self-gates per user against their
-    configured `morning_time` and a `last_daily_digest_sent_on` marker, so
-    frequent cron ticks never double-send.
-  - **Critical weather** — also cron-triggered, but aggregated: all newly
-    at-risk Kytky across a workspace go into *one* push per opted-in member
-    ("3 kytky potřebují ochranu před mrazem"), not one push per plant.
-    Tracked via `care_tasks.alerted_at` so an unresolved alert isn't repeated
-    every tick.
-  - **Sick/monitoring status change** — event-triggered, not cron-based.
-    Fires immediately from inside the status-transition code
-    (`kytka_status.py`), since a status flip is inherently a one-time edge
-    event. Excludes whoever caused the transition.
+- **Daily digest** — the only automatic push notification. It is
+  cron-triggered (`app/jobs/runner.py daily-digest`), runs frequently
+  (~every 15 min), and self-gates per user against their configured
+  `morning_time` and a `last_daily_digest_sent_on` marker, so frequent cron
+  ticks never double-send.
+- Weather still influences care generation, especially watering, but it does
+  not produce standalone weather-protection tasks or standalone pushes.
+- Status changes (`monitoring`/`sick`) stay in app state and history; they do
+  not send immediate push notifications.
 
 ## Deployment topology
 

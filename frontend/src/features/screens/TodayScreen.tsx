@@ -4,7 +4,6 @@ import {
   Bug,
   Camera,
   CircleCheck,
-  CloudSun,
   Droplets,
   Eye,
   Plane,
@@ -83,7 +82,6 @@ const QUICK_TASK_BUSY_LABEL: Record<QuickTaskType, string> = {
 const DETAILED_TASK_EVENT_DEFAULTS: Record<string, CareEventCreateRequest["event_type"]> = {
   checkin: "checkin",
   pest_followup: "pest_observation",
-  weather_protection: "treatment",
   maintenance: "maintenance",
 };
 
@@ -93,7 +91,6 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   checkin: "Kontrola",
   pest_followup: "Kontrola škůdců",
   photo_observation: "Fotka do historie",
-  weather_protection: "Ochrana před počasím",
   maintenance: "Údržba",
 };
 
@@ -103,7 +100,6 @@ const TASK_TYPE_ICONS: Record<string, LucideIcon> = {
   checkin: Eye,
   pest_followup: Bug,
   photo_observation: Camera,
-  weather_protection: CloudSun,
   maintenance: Wrench,
 };
 
@@ -115,13 +111,12 @@ const PRIORITY_RANK: Record<string, number> = {
 };
 
 const TASK_TYPE_RANK: Record<string, number> = {
-  weather_protection: 0,
-  pest_followup: 1,
-  checkin: 2,
-  watering: 3,
-  fertilizing: 4,
-  maintenance: 5,
-  photo_observation: 6,
+  pest_followup: 0,
+  checkin: 1,
+  watering: 2,
+  fertilizing: 3,
+  maintenance: 4,
+  photo_observation: 5,
 };
 
 const RECOVERY_TREND_OPTIONS = [
@@ -162,7 +157,11 @@ export function TodayScreen() {
   const [dailySergeantMessage] = useState(() => getRandomSergeantMessage());
   const [isSergeantMessageDismissed, setIsSergeantMessageDismissed] = useState(false);
 
-  const loadToday = useCallback(async (options: { refresh?: boolean; showLoading?: boolean } = {}) => {
+  const loadToday = useCallback(async (options: {
+    refresh?: boolean;
+    showLoading?: boolean;
+    suppressError?: boolean;
+  } = {}) => {
     setError(null);
     if (options.showLoading ?? true) {
       setIsLoading(true);
@@ -183,9 +182,13 @@ export function TodayScreen() {
       setLightMismatches(plan.light_mismatches);
       setKytky(kytkyData);
     } catch (loadError) {
-      setError(
-        loadError instanceof Error ? loadError.message : "Dnešní plán se nenačetl.",
-      );
+      if (!options.suppressError) {
+        setError(
+          loadError instanceof Error ? loadError.message : "Dnešní plán se nenačetl.",
+        );
+      } else {
+        console.warn("Dnešní plán se po změně nepodařilo obnovit.", loadError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -285,8 +288,9 @@ export function TodayScreen() {
 
       await apiPostAuthed(`/api/care-tasks/${activeTask.id}/complete`, taskPayload);
       uploadedPath = null;
+      setTasks((current) => current.filter((task) => task.id !== activeTask.id));
       resetDetailedSheet();
-      await loadToday({ refresh: false, showLoading: false });
+      void loadToday({ refresh: false, showLoading: false, suppressError: true });
     } catch (saveError) {
       if (uploadedPath) {
         await deleteUploadedPlantPhoto(uploadedPath).catch(() => undefined);
@@ -304,11 +308,13 @@ export function TodayScreen() {
     setBusyKey(group.key);
 
     try {
+      const completedTaskIds = new Set(group.tasks.map((task) => task.id));
       await apiPostAuthed<CareTaskCompleteGroupResponse>("/api/care-tasks/complete", {
         event_type: group.taskType,
         task_ids: group.tasks.map((task) => task.id),
       });
-      await loadToday({ refresh: false, showLoading: false });
+      setTasks((current) => current.filter((task) => !completedTaskIds.has(task.id)));
+      void loadToday({ refresh: false, showLoading: false, suppressError: true });
     } catch (completeError) {
       setError(
         completeError instanceof Error ? completeError.message : "Úkol se nepodařilo uložit.",
@@ -326,13 +332,17 @@ export function TodayScreen() {
     setBulkBusy(taskType);
 
     try {
+      const completedTaskIds = new Set(
+        groupsToComplete.flatMap((group) => group.tasks.map((task) => task.id)),
+      );
       await apiPostAuthed<CareTaskCompleteGroupResponse>("/api/care-tasks/complete", {
         event_type: taskType,
         task_ids: groupsToComplete.flatMap((group) =>
           group.tasks.map((task) => task.id),
         ),
       });
-      await loadToday({ refresh: false, showLoading: false });
+      setTasks((current) => current.filter((task) => !completedTaskIds.has(task.id)));
+      void loadToday({ refresh: false, showLoading: false, suppressError: true });
     } catch (completeError) {
       setError(
         completeError instanceof Error ? completeError.message : "Úkol se nepodařilo uložit.",
@@ -371,7 +381,8 @@ export function TodayScreen() {
         task_ids: [task.id],
       });
       uploadedPath = null;
-      await loadToday({ refresh: false, showLoading: false });
+      setTasks((current) => current.filter((candidate) => candidate.id !== task.id));
+      void loadToday({ refresh: false, showLoading: false, suppressError: true });
     } catch (photoError) {
       if (uploadedPath) {
         await deleteUploadedPlantPhoto(uploadedPath).catch(() => undefined);
@@ -389,10 +400,12 @@ export function TodayScreen() {
     setBusyKey(key);
 
     try {
+      const skippedTaskIds = new Set(taskIds);
       for (const taskId of taskIds) {
         await apiPostAuthed(`/api/care-tasks/${taskId}/skip`, {});
       }
-      await loadToday({ refresh: false, showLoading: false });
+      setTasks((current) => current.filter((task) => !skippedTaskIds.has(task.id)));
+      void loadToday({ refresh: false, showLoading: false, suppressError: true });
     } catch (skipError) {
       setError(
         skipError instanceof Error ? skipError.message : "Úkol se nepodařilo přeskočit.",

@@ -12,10 +12,7 @@ type NotificationsSectionProps = {
   onBack: () => void;
 };
 
-type BoolPrefKey =
-  | "daily_plan_enabled"
-  | "critical_weather_enabled"
-  | "sick_plant_enabled";
+type BoolPrefKey = "daily_plan_enabled";
 
 type NotificationTypeMeta = {
   description: string;
@@ -25,15 +22,7 @@ type NotificationTypeMeta = {
 const TYPE_META: Record<BoolPrefKey, NotificationTypeMeta> = {
   daily_plan_enabled: {
     label: "Denní přehled úkolů",
-    description: "Ranní souhrn toho, co dnes zalít, přihnojit nebo zkontrolovat.",
-  },
-  critical_weather_enabled: {
-    label: "Kritické počasí",
-    description: "Varování při horku, mrazu nebo počasí, které může kytky dorazit.",
-  },
-  sick_plant_enabled: {
-    label: "Nemocná nebo sledovaná kytka",
-    description: "Upozornění, když se kytka přepne do stavu nemocná nebo sledovaná.",
+    description: "Souhrn toho, co dnes zalít, přihnojit nebo zkontrolovat.",
   },
 };
 
@@ -211,10 +200,10 @@ function TypeSettings({
       <label className={`notification-time-row${!isEnabled ? " is-disabled" : ""}`}>
         <span className="notification-time-row__text">
           <Text as="span" variant="label">
-            Čas denního přehledu
+            Čas notifikace
           </Text>
           <Text as="span" variant="caption" tone="muted">
-            Kdy má přijít ranní seznam úkolů.
+            Kdy má přijít denní seznam úkolů.
           </Text>
         </span>
         <input

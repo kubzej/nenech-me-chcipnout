@@ -103,13 +103,6 @@ def _instructions_for_task(row: dict[str, Any]) -> str | None:
         return _profile_survival_hint(row, "survival_watering_hint")
     if task_type == "fertilizing":
         return _profile_survival_hint(row, "survival_fertilizing_hint")
-    if task_type == "weather_protection":
-        recommendation = row.get("recommendation_json")
-        if isinstance(recommendation, dict):
-            if "forecast_temp_min_c" in recommendation:
-                return _profile_survival_hint(row, "survival_frost_hint")
-            if "forecast_temp_max_c" in recommendation:
-                return _profile_survival_hint(row, "survival_heat_hint")
     return None
 
 
@@ -164,8 +157,6 @@ def _legacy_copy_sections(
         return _legacy_photo_copy_sections(recommendation)
     if task_type == "maintenance":
         return _legacy_maintenance_copy_sections(row, recommendation)
-    if task_type == "weather_protection":
-        return _legacy_weather_protection_copy_sections(recommendation)
     return []
 
 
@@ -269,50 +260,6 @@ def _legacy_maintenance_copy_sections(
         else "Prořež, přesaď nebo otoč podle stavu."
     )
     return [{"kind": "info", "text": reason}, {"kind": "action", "text": action}]
-
-
-def _legacy_weather_protection_copy_sections(
-    recommendation: dict[str, Any]
-) -> list[dict[str, str]]:
-    temp_min = recommendation.get("forecast_temp_min_c")
-    temp_max = recommendation.get("forecast_temp_max_c")
-    if isinstance(temp_min, int | float):
-        sections = [{"kind": "weather", "text": f"Dnes bude {float(temp_min):g} °C."}]
-        threshold = recommendation.get("cold_sensitive_below_c")
-        if isinstance(threshold, int | float):
-            sections.append(
-                {
-                    "kind": "info",
-                    "text": (
-                        f"Práh citlivosti profilu je {float(threshold):g} °C "
-                        "pro mráz/chlad."
-                    ),
-                }
-            )
-        sections.append(
-            {"kind": "action", "text": "Dej ji dovnitř, nebo ji aspoň přikryj."}
-        )
-        return sections
-
-    if isinstance(temp_max, int | float):
-        sections = [{"kind": "weather", "text": f"Dnes bude {float(temp_max):g} °C."}]
-        threshold = recommendation.get("heat_sensitive_above_c")
-        if isinstance(threshold, int | float):
-            sections.append(
-                {
-                    "kind": "info",
-                    "text": (
-                        f"Práh citlivosti profilu je {float(threshold):g} °C "
-                        "pro horko."
-                    ),
-                }
-            )
-        sections.append(
-            {"kind": "action", "text": "Dej ji do stínu a zkontroluj zálivku."}
-        )
-        return sections
-
-    return []
 
 
 def _profile_survival_hint(row: dict[str, Any], key: str) -> str | None:
@@ -484,7 +431,6 @@ async def _complete_care_tasks(
                 UUID(str(task["kytka_id"])),
                 payload.event_type,
                 payload.condition,
-                actor_user_id=current_user.user_id,
             )
 
     return CareTaskCompleteGroupResponse(

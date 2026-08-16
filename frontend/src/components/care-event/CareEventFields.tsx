@@ -38,7 +38,9 @@ export function CareEventFields({
       event_type: eventType,
       amount_ml: null,
       method: null,
-      condition: null,
+      condition: CONDITION_TYPES.includes(eventType)
+        ? defaultPlantStatus(kytkaStatus)
+        : null,
       note: null,
     });
   }
@@ -100,10 +102,7 @@ export function CareEventFields({
           label="Jak jí je?"
           onValueChange={(value) => onChange({ condition: value })}
           options={PLANT_STATUS_OPTIONS}
-          value={
-            values.condition ??
-            (isPlantStatus(kytkaStatus) ? kytkaStatus : "ok")
-          }
+          value={values.condition ?? defaultPlantStatus(kytkaStatus)}
         />
       ) : null}
       {showCondition && onPhotoChange ? (
@@ -141,6 +140,10 @@ export function CareEventFields({
 
 function isPlantStatus(value: string | undefined): value is CareEventCondition {
   return value === "ok" || value === "monitoring" || value === "sick";
+}
+
+function defaultPlantStatus(value: string | undefined): CareEventCondition {
+  return isPlantStatus(value) ? value : "ok";
 }
 
 function parseOptionalInt(value: string): number | null {

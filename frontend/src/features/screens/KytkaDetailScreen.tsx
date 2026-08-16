@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   Bug,
   Camera,
-  CloudSun,
   Droplets,
   Eye,
   Image as ImageIcon,
@@ -101,7 +100,7 @@ export function KytkaDetailScreen({
     useState<StatusSymptomId | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  const loadTimeline = useCallback(async () => {
+  const loadTimeline = useCallback(async (options: { suppressError?: boolean } = {}) => {
     setError(null);
     setIsLoading(true);
 
@@ -117,9 +116,13 @@ export function KytkaDetailScreen({
       setMembers(membersData);
       setMe(meData);
     } catch (loadError) {
-      setError(
-        loadError instanceof Error ? loadError.message : "Historie se nenačetla.",
-      );
+      if (!options.suppressError) {
+        setError(
+          loadError instanceof Error ? loadError.message : "Historie se nenačetla.",
+        );
+      } else {
+        console.warn("Historii se po změně nepodařilo obnovit.", loadError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -144,7 +147,7 @@ export function KytkaDetailScreen({
       occurred_at: event.occurred_at,
       amount_ml: event.amount_ml,
       method: event.method,
-      condition: event.condition as CareEventCreateRequest["condition"],
+      condition: normalizeEditableCondition(event.condition),
       note: event.note,
     });
   }
@@ -200,8 +203,14 @@ export function KytkaDetailScreen({
     setIsSaving(true);
 
     const payload: CareEventCreateRequest = { kytka_id: kytka.id, ...formValues };
+    let uploadedPath: string | null = null;
 
     try {
+      if (eventPhotoFile) {
+        const uploaded = await uploadPlantPhoto(kytka.id, eventPhotoFile);
+        uploadedPath = uploaded.storagePath;
+      }
+
       const savedEvent = editingEvent
         ? await apiPatchAuthed<CareEventItem>(
             `/api/care-events/${editingEvent.id}`,
@@ -209,24 +218,43 @@ export function KytkaDetailScreen({
           )
         : await apiPostAuthed<CareEventItem>("/api/care-events", payload);
 
-      if (eventPhotoFile) {
-        const uploaded = await uploadPlantPhoto(kytka.id, eventPhotoFile);
+      let savedPhoto: PlantPhotoItem | null = null;
+      if (uploadedPath) {
+        const photoStoragePath = uploadedPath;
         try {
-          await apiPostAuthed("/api/plant-photos", {
+          savedPhoto = await apiPostAuthed<PlantPhotoItem>("/api/plant-photos", {
             kytka_id: kytka.id,
-            storage_path: uploaded.storagePath,
+            storage_path: photoStoragePath,
             care_event_id: savedEvent.id,
           });
+          uploadedPath = null;
         } catch (photoError) {
-          await deleteUploadedPlantPhoto(uploaded.storagePath).catch(() => undefined);
+          await deleteUploadedPlantPhoto(photoStoragePath).catch(() => undefined);
+          uploadedPath = null;
+          if (!editingEvent) {
+            await apiDeleteAuthed(`/api/care-events/${savedEvent.id}`).catch(
+              () => undefined,
+            );
+          }
           throw photoError;
         }
       }
 
+      setEvents((current) =>
+        editingEvent
+          ? current.map((item) => (item.id === savedEvent.id ? savedEvent : item))
+          : [savedEvent, ...current],
+      );
+      if (savedPhoto) {
+        setPhotos((current) => [savedPhoto, ...current]);
+      }
       resetEventForm();
-      await loadTimeline();
+      void loadTimeline({ suppressError: true });
       onDataChanged();
     } catch (saveError) {
+      if (uploadedPath) {
+        await deleteUploadedPlantPhoto(uploadedPath).catch(() => undefined);
+      }
       setError(
         saveError instanceof Error ? saveError.message : "Event se nepodařilo uložit.",
       );
@@ -249,8 +277,9 @@ export function KytkaDetailScreen({
 
     try {
       await apiDeleteAuthed(`/api/care-events/${event.id}`);
+      setEvents((current) => current.filter((item) => item.id !== event.id));
       resetEventForm();
-      await loadTimeline();
+      void loadTimeline({ suppressError: true });
       onDataChanged();
     } catch (deleteError) {
       setError(
@@ -291,8 +320,9 @@ export function KytkaDetailScreen({
 
     try {
       const uploaded = await uploadPlantPhoto(kytka.id, standalonePhotoFile);
+      let savedPhoto: PlantPhotoItem | null = null;
       try {
-        await apiPostAuthed("/api/plant-photos", {
+        savedPhoto = await apiPostAuthed<PlantPhotoItem>("/api/plant-photos", {
           kytka_id: kytka.id,
           storage_path: uploaded.storagePath,
           note: standaloneNote || null,
@@ -302,8 +332,11 @@ export function KytkaDetailScreen({
         await deleteUploadedPlantPhoto(uploaded.storagePath).catch(() => undefined);
         throw metadataError;
       }
+      if (savedPhoto) {
+        setPhotos((current) => [savedPhoto, ...current]);
+      }
       resetStandalonePhoto();
-      await loadTimeline();
+      void loadTimeline({ suppressError: true });
       onDataChanged();
     } catch (uploadError) {
       setError(
@@ -328,8 +361,9 @@ export function KytkaDetailScreen({
 
     try {
       await apiDeleteAuthed(`/api/plant-photos/${photo.id}`);
+      setPhotos((current) => current.filter((item) => item.id !== photo.id));
       setViewingPhoto(null);
-      await loadTimeline();
+      void loadTimeline({ suppressError: true });
       onDataChanged();
     } catch (deleteError) {
       setError(
@@ -1064,6 +1098,16 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function normalizeEditableCondition(
+  value: string | null,
+): CareEventCreateRequest["condition"] {
+  if (value === "ok" || value === "monitoring" || value === "sick") {
+    return value;
+  }
+
+  return null;
+}
+
 const EVENT_TYPE_LABELS: Record<string, string> = {
   watering: "Zalévání",
   fertilizing: "Hnojení",
@@ -1071,7 +1115,6 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   pest_observation: "Škůdci",
   treatment: "Ošetření",
   maintenance: "Údržba",
-  weather_protection: "Ochrana před počasím",
 };
 
 const EVENT_TYPE_ICONS: Record<string, LucideIcon> = {
@@ -1081,7 +1124,6 @@ const EVENT_TYPE_ICONS: Record<string, LucideIcon> = {
   pest_observation: Bug,
   treatment: Stethoscope,
   maintenance: Wrench,
-  weather_protection: CloudSun,
 };
 
 function formatEventType(eventType: string) {

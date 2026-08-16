@@ -372,12 +372,6 @@
   box-shadow: inset 0 0 0 1px rgba(109, 31, 22, 0.14);
 }
 
-.kytka-detail__timeline-marker--weather_protection {
-  color: var(--color-earth);
-  background: rgba(244, 199, 106, 0.38);
-  box-shadow: inset 0 0 0 1px rgba(106, 67, 29, 0.14);
-}
-
 .kytka-detail__timeline-marker--photo {
   color: var(--color-earth);
   background: rgba(244, 199, 106, 0.48);

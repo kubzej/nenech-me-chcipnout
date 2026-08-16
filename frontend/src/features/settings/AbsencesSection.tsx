@@ -52,7 +52,10 @@ export function AbsencesSection({ onBack }: AbsencesSectionProps) {
   const [formValues, setFormValues] = useState<FormState>(DEFAULT_FORM_STATE);
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  const loadData = useCallback(async (options: { showLoading?: boolean } = {}) => {
+  const loadData = useCallback(async (options: {
+    showLoading?: boolean;
+    suppressError?: boolean;
+  } = {}) => {
     setError(null);
     if (options.showLoading ?? true) {
       setIsLoading(true);
@@ -68,7 +71,11 @@ export function AbsencesSection({ onBack }: AbsencesSectionProps) {
       setMembers(membersData);
       setMe(meData);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Absence se nenačetly.");
+      if (!options.suppressError) {
+        setError(loadError instanceof Error ? loadError.message : "Absence se nenačetly.");
+      } else {
+        console.warn("Absence se po změně nepodařilo obnovit.", loadError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -131,21 +138,41 @@ export function AbsencesSection({ onBack }: AbsencesSectionProps) {
         reason: formValues.reason || null,
       };
 
+      const savedAbsences: AbsenceItem[] = [];
       if (editingAbsence) {
         const payload: AbsenceCreateRequest = { user_id: formValues.who, ...basePayload };
-        await apiPatchAuthed(`/api/absences/${editingAbsence.id}`, payload);
+        savedAbsences.push(
+          await apiPatchAuthed<AbsenceItem>(
+            `/api/absences/${editingAbsence.id}`,
+            payload,
+          ),
+        );
       } else if (formValues.who === BOTH_VALUE) {
         for (const member of members) {
           const payload: AbsenceCreateRequest = { user_id: member.user_id, ...basePayload };
-          await apiPostAuthed("/api/absences", payload);
+          savedAbsences.push(await apiPostAuthed<AbsenceItem>("/api/absences", payload));
         }
       } else {
         const payload: AbsenceCreateRequest = { user_id: formValues.who, ...basePayload };
-        await apiPostAuthed("/api/absences", payload);
+        savedAbsences.push(await apiPostAuthed<AbsenceItem>("/api/absences", payload));
       }
 
+      setAbsences((current) => {
+        if (!editingAbsence) {
+          return [...savedAbsences, ...current];
+        }
+
+        const saved = savedAbsences[0];
+        if (!saved) {
+          return current;
+        }
+
+        return current.map((absence) =>
+          absence.id === saved.id ? saved : absence,
+        );
+      });
       resetForm();
-      await loadData({ showLoading: false });
+      void loadData({ showLoading: false, suppressError: true });
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "Absenci se nepodařilo uložit.",
@@ -169,8 +196,9 @@ export function AbsencesSection({ onBack }: AbsencesSectionProps) {
 
     try {
       await apiDeleteAuthed(`/api/absences/${absence.id}`);
+      setAbsences((current) => current.filter((item) => item.id !== absence.id));
       resetForm();
-      await loadData({ showLoading: false });
+      void loadData({ showLoading: false, suppressError: true });
     } catch (deleteError) {
       setError(
         deleteError instanceof Error ? deleteError.message : "Absenci se nepodařilo smazat.",

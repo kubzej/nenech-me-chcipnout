@@ -25,7 +25,6 @@ router = APIRouter(prefix="/api/push", tags=["push"])
 
 _PREFS_SELECT = (
     "workspace_id,user_id,master_enabled,daily_plan_enabled,"
-    "critical_weather_enabled,sick_plant_enabled,"
     "morning_time,timezone,"
     "created_at,updated_at"
 )

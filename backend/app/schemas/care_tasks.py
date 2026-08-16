@@ -12,7 +12,6 @@ CareTaskType = Literal[
     "checkin",
     "photo_observation",
     "pest_followup",
-    "weather_protection",
     "maintenance",
 ]
 

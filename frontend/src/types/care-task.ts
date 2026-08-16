@@ -4,7 +4,6 @@ export type CareTaskType =
   | "checkin"
   | "photo_observation"
   | "pest_followup"
-  | "weather_protection"
   | "maintenance";
 
 export type CareTaskStatus =

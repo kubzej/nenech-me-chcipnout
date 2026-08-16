@@ -46,11 +46,11 @@ export async function deleteUploadedPlantPhoto(storagePath: string): Promise<voi
 }
 
 async function compressImage(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+  const image = await decodeImage(file);
 
-  const scale = Math.min(1, MAX_DIMENSION_PX / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
+  const scale = Math.min(1, MAX_DIMENSION_PX / Math.max(image.width, image.height));
+  const width = Math.round(image.width * scale);
+  const height = Math.round(image.height * scale);
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -61,8 +61,8 @@ async function compressImage(file: File): Promise<Blob> {
     throw new Error("Canvas není podporovaný.");
   }
 
-  context.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
+  context.drawImage(image.source, 0, 0, width, height);
+  image.close();
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -77,4 +77,50 @@ async function compressImage(file: File): Promise<Blob> {
       JPEG_QUALITY,
     );
   });
+}
+
+type DecodedImage = {
+  close: () => void;
+  height: number;
+  source: CanvasImageSource;
+  width: number;
+};
+
+async function decodeImage(file: File): Promise<DecodedImage> {
+  if ("createImageBitmap" in window) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      return {
+        close: () => bitmap.close(),
+        height: bitmap.height,
+        source: bitmap,
+        width: bitmap.width,
+      };
+    } catch {
+      // Some mobile browsers fail createImageBitmap for camera images that an
+      // ordinary <img> can still decode.
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  const image = new Image();
+
+  try {
+    image.src = objectUrl;
+    await image.decode();
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error(
+      error instanceof Error
+        ? `Fotku se nepodařilo přečíst: ${error.message}`
+        : "Fotku se nepodařilo přečíst.",
+    );
+  }
+
+  return {
+    close: () => URL.revokeObjectURL(objectUrl),
+    height: image.naturalHeight,
+    source: image,
+    width: image.naturalWidth,
+  };
 }

@@ -114,16 +114,15 @@ Feeds directly into Dnes's pre-departure watering logic and the away-banner.
 
 ## Notifikace (Push notifications)
 
-- Web Push, opt-in per device, with per-type toggles: daily plan digest,
-  critical weather, sick/monitored plant.
+- Web Push, opt-in per device.
 - iOS-aware: detects Safari-not-installed and shows an instructional state
   ("add to Home Screen first") instead of a broken permission prompt.
 - **Daily digest**: one aggregated push per user per day ("Čeká na tebe N
   úkolů"), at a per-user configurable time — not a fixed morning-only slot.
-- **Critical weather**: aggregated across a whole workspace, one push per
-  opted-in member, not one per plant.
-- **Sick/monitoring alert**: fires immediately on the status transition,
-  notifies the other member, not the person who caused it.
+- Weather can affect generated care tasks, especially watering, but does not
+  create standalone weather notifications.
+- Sick/monitoring status changes are recorded in the app, but do not create
+  immediate push notifications.
 - An "evening reminder" type, and later a "weekly photo" toggle that had no
   trigger behind it, were both built then deliberately removed (kept the
   notification surface simple, no dead switches) — fully deleted, not just

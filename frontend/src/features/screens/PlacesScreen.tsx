@@ -69,7 +69,7 @@ export function PlacesScreen() {
   const { confirm, confirmDialog } = useConfirmDialog();
 
   const loadPlaces = useCallback(
-    async (options: { showLoading?: boolean } = {}) => {
+    async (options: { showLoading?: boolean; suppressError?: boolean } = {}) => {
       setError(null);
       if (options.showLoading ?? true) {
         setIsLoading(true);
@@ -81,11 +81,15 @@ export function PlacesScreen() {
         );
         setLocations(data);
       } catch (loadError) {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : 'Místa se nenačetla.',
-        );
+        if (!options.suppressError) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : 'Místa se nenačetla.',
+          );
+        } else {
+          console.warn('Místa se po změně nepodařilo obnovit.', loadError);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -128,7 +132,7 @@ export function PlacesScreen() {
         await apiPostAuthed('/api/places/locations', payload);
       }
       resetLocationForm();
-      await loadPlaces({ showLoading: false });
+      void loadPlaces({ showLoading: false, suppressError: true });
     } catch (createError) {
       setError(
         createError instanceof Error
@@ -179,7 +183,8 @@ export function PlacesScreen() {
     try {
       await apiDeleteAuthed(`/api/places/locations/${location.id}`);
       resetLocationForm();
-      await loadPlaces({ showLoading: false });
+      setLocations((current) => current.filter((item) => item.id !== location.id));
+      void loadPlaces({ showLoading: false, suppressError: true });
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -215,7 +220,7 @@ export function PlacesScreen() {
         await apiPostAuthed('/api/places/zones', payload);
       }
       resetZoneForm();
-      await loadPlaces({ showLoading: false });
+      void loadPlaces({ showLoading: false, suppressError: true });
     } catch (createError) {
       setError(
         createError instanceof Error
@@ -283,7 +288,13 @@ export function PlacesScreen() {
     try {
       await apiDeleteAuthed(`/api/places/zones/${zone.id}`);
       resetZoneForm();
-      await loadPlaces({ showLoading: false });
+      setLocations((current) =>
+        current.map((location) => ({
+          ...location,
+          zones: location.zones.filter((item) => item.id !== zone.id),
+        })),
+      );
+      void loadPlaces({ showLoading: false, suppressError: true });
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -322,7 +333,7 @@ export function PlacesScreen() {
         await apiPostAuthed('/api/places/containers', payload);
       }
       resetContainerForm();
-      await loadPlaces({ showLoading: false });
+      void loadPlaces({ showLoading: false, suppressError: true });
     } catch (createError) {
       setError(
         createError instanceof Error
@@ -388,7 +399,16 @@ export function PlacesScreen() {
     try {
       await apiDeleteAuthed(`/api/places/containers/${container.id}`);
       resetContainerForm();
-      await loadPlaces({ showLoading: false });
+      setLocations((current) =>
+        current.map((location) => ({
+          ...location,
+          zones: location.zones.map((zone) => ({
+            ...zone,
+            containers: zone.containers.filter((item) => item.id !== container.id),
+          })),
+        })),
+      );
+      void loadPlaces({ showLoading: false, suppressError: true });
     } catch (deleteError) {
       setError(
         deleteError instanceof Error

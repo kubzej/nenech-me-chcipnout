@@ -3,8 +3,6 @@ export type NotificationPreferencesItem = {
   user_id: string;
   master_enabled: boolean;
   daily_plan_enabled: boolean;
-  critical_weather_enabled: boolean;
-  sick_plant_enabled: boolean;
   morning_time: string;
   timezone: string;
   created_at: string;
@@ -14,8 +12,6 @@ export type NotificationPreferencesItem = {
 export type NotificationPreferencesUpdate = {
   master_enabled?: boolean;
   daily_plan_enabled?: boolean;
-  critical_weather_enabled?: boolean;
-  sick_plant_enabled?: boolean;
   morning_time?: string;
 };
 

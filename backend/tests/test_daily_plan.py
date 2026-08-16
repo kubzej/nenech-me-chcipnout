@@ -10,7 +10,6 @@ from app.services.daily_plan import (
     _rain_delay_context,
     _watering_copy_sections,
     _watering_explanation,
-    _weather_protection_copy_sections,
 )
 
 
@@ -199,15 +198,4 @@ def test_pest_followup_copy_sections_split_reason_and_action() -> None:
     assert _pest_followup_copy_sections(5) == [
         {"kind": "info", "text": "Škůdci zaznamenaní před 5 dny."},
         {"kind": "action", "text": "Zkontroluj, jestli se nešíří nebo nevrátili."},
-    ]
-
-
-def test_weather_protection_copy_sections_split_weather_threshold_and_action() -> None:
-    assert _weather_protection_copy_sections("heat", 34.2, 30) == [
-        {"kind": "weather", "text": "Dnes bude 34.2 °C."},
-        {
-            "kind": "info",
-            "text": "Práh citlivosti profilu je 30 °C pro horko.",
-        },
-        {"kind": "action", "text": "Dej ji do stínu a zkontroluj zálivku."},
     ]

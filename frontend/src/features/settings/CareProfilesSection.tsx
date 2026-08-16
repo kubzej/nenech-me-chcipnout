@@ -42,7 +42,10 @@ export function CareProfilesSection({ onBack }: CareProfilesSectionProps) {
   );
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  const loadProfiles = useCallback(async (options: { showLoading?: boolean } = {}) => {
+  const loadProfiles = useCallback(async (options: {
+    showLoading?: boolean;
+    suppressError?: boolean;
+  } = {}) => {
     setError(null);
     if (options.showLoading ?? true) {
       setIsLoading(true);
@@ -52,11 +55,15 @@ export function CareProfilesSection({ onBack }: CareProfilesSectionProps) {
       const data = await apiGetAuthed<CareProfileItem[]>("/api/care-profiles");
       setProfiles(data);
     } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Care profily se nenačetly.",
-      );
+      if (!options.suppressError) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Care profily se nenačetly.",
+        );
+      } else {
+        console.warn("Care profily se po změně nepodařilo obnovit.", loadError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -89,13 +96,24 @@ export function CareProfilesSection({ onBack }: CareProfilesSectionProps) {
     setIsSaving(true);
 
     try {
+      const savedProfile = editingProfile
+        ? await apiPatchAuthed<CareProfileItem>(
+            `/api/care-profiles/${editingProfile.id}`,
+            formValues,
+          )
+        : await apiPostAuthed<CareProfileItem>("/api/care-profiles", formValues);
+
       if (editingProfile) {
-        await apiPatchAuthed(`/api/care-profiles/${editingProfile.id}`, formValues);
+        setProfiles((current) =>
+          current.map((profile) =>
+            profile.id === savedProfile.id ? savedProfile : profile,
+          ),
+        );
       } else {
-        await apiPostAuthed("/api/care-profiles", formValues);
+        setProfiles((current) => [savedProfile, ...current]);
       }
       resetForm();
-      await loadProfiles({ showLoading: false });
+      void loadProfiles({ showLoading: false, suppressError: true });
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -125,8 +143,9 @@ export function CareProfilesSection({ onBack }: CareProfilesSectionProps) {
 
     try {
       await apiDeleteAuthed(`/api/care-profiles/${profile.id}`);
+      setProfiles((current) => current.filter((item) => item.id !== profile.id));
       resetForm();
-      await loadProfiles({ showLoading: false });
+      void loadProfiles({ showLoading: false, suppressError: true });
     } catch (deleteError) {
       setError(
         deleteError instanceof Error

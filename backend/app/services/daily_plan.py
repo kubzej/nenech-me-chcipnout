@@ -1,3 +1,4 @@
+import logging
 from asyncio import gather
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -9,6 +10,8 @@ import httpx
 from app.core.supabase_rest import raise_supabase_error, supabase_rest_url
 from app.services.kytka_status import escalate_to_monitoring
 from app.services.weather import fetch_forecast_json
+
+logger = logging.getLogger(__name__)
 
 # Starting thresholds — expected to be tuned once this has real usage,
 # not treated as final (see context.md).
@@ -33,7 +36,7 @@ _FERTILIZING_FALLBACK_HINT = (
 _TASK_SELECT = (
     "id,task_date,task_type,target_type,kytka_id,container_id,status,priority,"
     "source,title,instructions,explanation,recommended_amount_ml,due_at,"
-    "completed_by,completed_at,outcome_note,alerted_at,recommendation_json,"
+    "completed_by,completed_at,outcome_note,recommendation_json,"
     "kytky(care_profiles(survival_watering_hint,survival_heat_hint,"
     "survival_frost_hint,survival_fertilizing_hint)),created_at"
 )
@@ -431,23 +434,46 @@ async def _fetch_and_snapshot_weather(
 
     forecasts: dict[str, list[dict[str, Any]]] = {}
     for location_id, location in locations.items():
-        cached = await _fetch_cached_forecast(
-            client, headers, workspace_id, location_id, today
-        )
+        try:
+            cached = await _fetch_cached_forecast(
+                client, headers, workspace_id, location_id, today
+            )
+        except Exception:
+            logger.exception(
+                "Failed to read cached weather forecast for location %s",
+                location_id,
+            )
+            cached = None
+
         if cached is not None:
             forecasts[location_id] = cached
             continue
 
-        forecast_json = await fetch_forecast_json(
-            float(location["latitude"]),
-            float(location["longitude"]),
-            str(location["timezone"]),
-        )
+        try:
+            forecast_json = await fetch_forecast_json(
+                float(location["latitude"]),
+                float(location["longitude"]),
+                str(location["timezone"]),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to fetch weather forecast for location %s",
+                location_id,
+            )
+            forecasts[location_id] = []
+            continue
+
         daily = _parse_daily(forecast_json.get("daily"))
         forecasts[location_id] = daily
-        await _upsert_weather_snapshots(
-            client, headers, workspace_id, location_id, daily
-        )
+        try:
+            await _upsert_weather_snapshots(
+                client, headers, workspace_id, location_id, daily
+            )
+        except Exception:
+            logger.exception(
+                "Failed to cache weather forecast for location %s",
+                location_id,
+            )
 
     return forecasts
 
@@ -923,72 +949,6 @@ async def _generate_for_kytka(
                 existing_statuses=existing_statuses,
             )
 
-    # --- Weather protection (frost or heat) — only Kytky actually exposed
-    # to outdoor weather; an indoor Kytka can't be "brought inside". ---
-    environment = zone.get("environment")
-    if environment != "indoor" and today_forecast is not None:
-        temp_min = today_forecast.get("temp_min_c")
-        temp_max = today_forecast.get("temp_max_c")
-        cold_threshold = profile.get("cold_sensitive_below_c")
-        frost_threshold = cold_threshold if cold_threshold is not None else 0
-        heat_threshold = profile.get("heat_sensitive_above_c")
-
-        frost_risk = (
-            profile.get("frost_sensitive")
-            and temp_min is not None
-            and temp_min < frost_threshold
-        )
-        heat_risk = heat_context is not None
-
-        if frost_risk:
-            copy_sections = _weather_protection_copy_sections(
-                "frost", temp_min, cold_threshold
-            )
-            await _upsert_task(
-                client,
-                headers,
-                workspace_id,
-                task_type="weather_protection",
-                target_type="kytka",
-                kytka_id=kytka_id,
-                container_id=None,
-                task_date=today,
-                priority="high",
-                title="Ochránit před mrazem",
-                instructions=_profile_hint(profile, "survival_frost_hint"),
-                explanation=_join_copy_sections(copy_sections),
-                recommendation_json={
-                    "forecast_temp_min_c": temp_min,
-                    "cold_sensitive_below_c": cold_threshold,
-                    "copy_sections": copy_sections,
-                },
-                existing_statuses=existing_statuses,
-            )
-        elif heat_risk:
-            copy_sections = _weather_protection_copy_sections(
-                "heat", temp_max, heat_threshold
-            )
-            await _upsert_task(
-                client,
-                headers,
-                workspace_id,
-                task_type="weather_protection",
-                target_type="kytka",
-                kytka_id=kytka_id,
-                container_id=None,
-                task_date=today,
-                priority="high",
-                title="Ochránit před horkem",
-                instructions=_profile_hint(profile, "survival_heat_hint"),
-                explanation=_join_copy_sections(copy_sections),
-                recommendation_json={
-                    "forecast_temp_max_c": temp_max,
-                    "heat_sensitive_above_c": heat_threshold,
-                    "copy_sections": copy_sections,
-                },
-                existing_statuses=existing_statuses,
-            )
-
 
 def _apply_dormant(value: int | None, is_dormant: bool) -> int | None:
     if value is None:
@@ -1269,32 +1229,6 @@ def _maintenance_copy_sections(
             "text": action or "Prořež, přesaď nebo otoč podle stavu.",
         },
     ]
-
-
-def _weather_protection_copy_sections(
-    risk: str, forecast_temp_c: object, threshold_c: object
-) -> list[dict[str, str]]:
-    if risk == "frost":
-        weather = f"Dnes bude {float(forecast_temp_c):g} °C."
-        action = "Dej ji dovnitř, nebo ji aspoň přikryj."
-    else:
-        weather = f"Dnes bude {float(forecast_temp_c):g} °C."
-        action = "Dej ji do stínu a zkontroluj zálivku."
-
-    sections = [{"kind": "weather", "text": weather}]
-    if isinstance(threshold_c, int | float):
-        label = "mráz/chlad" if risk == "frost" else "horko"
-        sections.append(
-            {
-                "kind": "info",
-                "text": (
-                    f"Práh citlivosti profilu je {float(threshold_c):g} °C "
-                    f"pro {label}."
-                ),
-            }
-        )
-    sections.append({"kind": "action", "text": action})
-    return sections
 
 
 def _join_copy_sections(sections: list[dict[str, str]]) -> str:

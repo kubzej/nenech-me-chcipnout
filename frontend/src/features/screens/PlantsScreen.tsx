@@ -42,7 +42,10 @@ export function PlantsScreen() {
   const [selectedKytkaId, setSelectedKytkaId] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  const loadData = useCallback(async (options: { showLoading?: boolean } = {}) => {
+  const loadData = useCallback(async (options: {
+    showLoading?: boolean;
+    suppressError?: boolean;
+  } = {}) => {
     setError(null);
     if (options.showLoading ?? true) {
       setIsLoading(true);
@@ -58,7 +61,11 @@ export function PlantsScreen() {
       setContainers(containersData);
       setCareProfiles(careProfilesData);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Kytky se nenačetly.");
+      if (!options.suppressError) {
+        setError(loadError instanceof Error ? loadError.message : "Kytky se nenačetly.");
+      } else {
+        console.warn("Kytky se po změně nepodařilo obnovit.", loadError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -87,13 +94,19 @@ export function PlantsScreen() {
         status: kytkaStatus,
       };
 
+      const savedKytka = editingKytka
+        ? await apiPatchAuthed<KytkaListItem>(`/api/kytky/${editingKytka.id}`, payload)
+        : await apiPostAuthed<KytkaListItem>("/api/kytky", payload);
+
       if (editingKytka) {
-        await apiPatchAuthed(`/api/kytky/${editingKytka.id}`, payload);
+        setKytky((current) =>
+          current.map((kytka) => (kytka.id === savedKytka.id ? savedKytka : kytka)),
+        );
       } else {
-        await apiPostAuthed("/api/kytky", payload);
+        setKytky((current) => [savedKytka, ...current]);
       }
       resetForm();
-      await loadData({ showLoading: false });
+      void loadData({ showLoading: false, suppressError: true });
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "Kytku se nepodařilo uložit.",
@@ -150,9 +163,10 @@ export function PlantsScreen() {
 
     try {
       await apiDeleteAuthed(`/api/kytky/${kytka.id}`);
+      setKytky((current) => current.filter((item) => item.id !== kytka.id));
       resetForm();
       setSelectedKytkaId(null);
-      await loadData({ showLoading: false });
+      void loadData({ showLoading: false, suppressError: true });
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
