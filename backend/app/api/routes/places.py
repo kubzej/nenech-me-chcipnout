@@ -23,6 +23,7 @@ from app.schemas.places import (
     ZoneCreateRequest,
     ZoneItem,
 )
+from app.services.deletions import detach_care_events_from_kytka_tasks
 from app.services.workspaces import get_first_workspace
 
 router = APIRouter(prefix="/api", tags=["places"])
@@ -549,11 +550,14 @@ async def _delete_kytky_in_containers(
     """Containers are archived, not hard-deleted — but a kytka can't
     usefully survive its container disappearing from Places, so deleting a
     container (directly, or via its zone/location) takes its kytky with it.
-    care_tasks/care_events/plant_photos cascade off kytky automatically
-    (20260807150000_kytky_hard_delete.sql)."""
+    Before the hard delete, completed task links are detached from shared
+    container-level history so care_tasks can cascade cleanly."""
     if not container_ids:
         return
 
+    await detach_care_events_from_kytka_tasks(
+        client, headers, workspace_id, container_ids=container_ids
+    )
     response = await client.delete(
         "/kytky",
         headers=headers,

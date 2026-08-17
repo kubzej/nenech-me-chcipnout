@@ -12,6 +12,7 @@ from app.core.supabase_rest import (
     supabase_user_headers,
 )
 from app.schemas.kytky import KytkaAvatarRequest, KytkaCreateRequest, KytkaListItem
+from app.services.deletions import detach_care_events_from_kytka_tasks
 from app.services.workspaces import get_first_workspace
 
 router = APIRouter(prefix="/api", tags=["kytky"])
@@ -169,6 +170,9 @@ async def delete_kytka(
     headers = supabase_user_headers(current_user.access_token)
 
     async with httpx.AsyncClient(base_url=supabase_rest_url(), timeout=12) as client:
+        await detach_care_events_from_kytka_tasks(
+            client, headers, workspace["id"], kytka_ids=[kytka_id]
+        )
         response = await client.delete(
             "/kytky",
             headers=headers,
