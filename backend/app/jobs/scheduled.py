@@ -196,5 +196,7 @@ def _is_due(
 def _digest_body(tasks: list[dict[str, Any]]) -> str:
     count = len(tasks)
     if count == 1:
-        return "Čeká na tebe 1 úkol. Kdo jinej to zalije?"
-    return f"Čeká na tebe {count} úkolů. Kdo jinej je zalije?"
+        return "Čeká na tebe 1 úkol."
+    if 2 <= count <= 4:
+        return f"Čekají na tebe {count} úkoly."
+    return f"Čeká na tebe {count} úkolů."
